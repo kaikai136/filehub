@@ -24,12 +24,12 @@
         <div v-if="activeConfig?.fetch_status === 'error'" class="folder-notice">最近一次获取失败：{{ activeConfig.fetch_error }}。当前展示上次成功获取的文件。</div>
         <div class="folder-table-scroll">
           <el-table :data="visibleFiles" class="folder-file-table" row-key="id" :empty-text="emptyText" style="width: 100%">
-            <el-table-column label="文件名称" min-width="240" sortable prop="name"><template #default="{ row }"><div class="browser-file-name"><span class="table-avatar file-avatar"><el-icon><Document /></el-icon></span><div><strong :title="row.name">{{ row.name }}</strong><small :title="row.relative_path">{{ row.relative_path }}</small></div></div></template></el-table-column>
+            <el-table-column label="文件名称" min-width="240" sortable prop="name"><template #default="{ row }"><div class="browser-file-name" title="双击编辑文件" @dblclick.stop="openEditor(row)"><span class="table-avatar file-avatar"><el-icon><Document /></el-icon></span><div><strong :title="row.name">{{ row.name }}</strong><small :title="row.relative_path">{{ row.relative_path }}</small></div></div></template></el-table-column>
             <el-table-column v-if="activeNode?.kind !== 'folder'" label="主机" min-width="140"><template #default="{ row }">{{ configById.get(row.file_config_id)?.host_name || '—' }}</template></el-table-column>
             <el-table-column label="文件大小" min-width="110" sortable prop="size"><template #default="{ row }">{{ formatSize(row.size) }}</template></el-table-column>
             <el-table-column label="修改时间" min-width="180" sortable prop="modified_at"><template #default="{ row }">{{ formatDate(row.modified_at) }}</template></el-table-column>
             <el-table-column label="获取状态" min-width="100"><template #default><el-tag size="small" effect="plain" type="success">已获取</el-tag></template></el-table-column>
-            <el-table-column label="操作" width="80" fixed="right"><template #default="{ row }"><el-button text type="primary" @click="showDetail(row)">详情</el-button></template></el-table-column>
+            <el-table-column label="操作" width="132" fixed="right"><template #default="{ row }"><el-button text type="primary" :icon="EditPen" @click="openEditor(row)">编辑</el-button><el-button text @click="showDetail(row)">详情</el-button></template></el-table-column>
           </el-table>
         </div>
         <div class="folder-content-footer"><span>包含隐藏文件及隐藏目录内的文件，目录本身不计数</span><span v-if="activeConfig?.last_fetched_at">上次获取：{{ formatDate(activeConfig.last_fetched_at) }}</span></div>
@@ -45,14 +45,32 @@
         <el-descriptions-item label="修改时间">{{ formatDate(selected.modified_at) }}</el-descriptions-item>
       </el-descriptions>
     </el-dialog>
+    <el-dialog v-model="editorVisible" class="file-editor-dialog" width="86%" top="5vh" :close-on-click-modal="false" :close-on-press-escape="!saving" :before-close="beforeEditorClose" destroy-on-close>
+      <template #header>
+        <div class="file-editor-heading">
+          <div><strong>{{ selected?.name || '文件编辑' }}</strong><small>{{ selected ? fullPath(selected) : '' }}</small></div>
+          <el-tag size="small" effect="plain">{{ editorLanguage }}</el-tag>
+        </div>
+      </template>
+      <div v-loading="editorLoading" class="file-editor-body">
+        <CodeEditor v-if="selected && !editorLoading" v-model="editorContent" :filename="selected.name" @language-change="editorLanguage = $event" @save="saveFile" />
+      </div>
+      <template #footer>
+        <span class="editor-shortcut">Ctrl / Cmd + S 保存</span>
+        <el-button :disabled="saving" @click="cancelEditor">取消</el-button>
+        <el-button type="primary" :loading="saving" :disabled="editorLoading || !editorDirty" @click="saveFile">保存</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onMounted, ref, watch } from 'vue'
-import { ElMessage, type ElTree } from 'element-plus'
-import { Document, FolderOpened, Monitor, Refresh, Search } from '@element-plus/icons-vue'
+import { computed, defineAsyncComponent, nextTick, onMounted, ref, watch } from 'vue'
+import { ElMessage, ElMessageBox, type ElTree } from 'element-plus'
+import { Document, EditPen, FolderOpened, Monitor, Refresh, Search } from '@element-plus/icons-vue'
 import { api } from '../api'
+
+const CodeEditor = defineAsyncComponent(() => import('../components/CodeEditor.vue'))
 
 type RemoteFile = { id: number; file_config_id: number; project: string; name: string; relative_path: string; file_type: string; size: number; modified_at: string | null }
 type Config = { id: number; project: string; host_name: string; ip_address: string; port: number; file_path: string; directory_paths: string[]; fetch_status: string; fetch_error: string; last_fetched_at: string | null }
@@ -61,6 +79,9 @@ const files = ref<RemoteFile[]>([]), configs = ref<Config[]>([]), loading = ref(
 const treeSearch = ref(''), fileSearch = ref(''), recursive = ref(false), activeKey = ref('')
 const expandedKeys = ref<string[]>([]), treeRef = ref<InstanceType<typeof ElTree>>()
 const detailVisible = ref(false), selected = ref<RemoteFile | null>(null)
+const editorVisible = ref(false), editorLoading = ref(false), saving = ref(false)
+const editorContent = ref(''), originalContent = ref(''), editorLanguage = ref('纯文本')
+const editorDirty = computed(() => editorContent.value !== originalContent.value)
 const configById = computed(() => new Map(configs.value.map(config => [config.id, config])))
 const fileGroups = computed(() => {
   const groups = new Map<number, RemoteFile[]>()
@@ -163,6 +184,47 @@ async function loadFiles() {
   finally { loading.value = false }
 }
 function showDetail(item: RemoteFile) { selected.value = item; detailVisible.value = true }
+async function openEditor(item: RemoteFile) {
+  if (editorLoading.value || saving.value) return
+  selected.value = item
+  editorContent.value = ''
+  originalContent.value = ''
+  editorLanguage.value = '识别中'
+  editorVisible.value = true
+  editorLoading.value = true
+  try {
+    const response = await api.get<{ file: RemoteFile; content: string; encoding: string }>(`/file-lists/${item.id}/`, { timeout: 30000 })
+    if (selected.value?.id !== item.id || !editorVisible.value) return
+    Object.assign(item, response.data.file)
+    editorContent.value = response.data.content
+    originalContent.value = response.data.content
+  } catch (error: any) {
+    ElMessage.error(error.response?.data?.detail || '读取文件失败')
+    editorVisible.value = false
+  } finally { editorLoading.value = false }
+}
+async function saveFile() {
+  if (!selected.value || editorLoading.value || saving.value || !editorDirty.value) return
+  saving.value = true
+  try {
+    const response = await api.patch<{ detail: string; file: RemoteFile }>(`/file-lists/${selected.value.id}/`, { content: editorContent.value }, { timeout: 30000 })
+    const current = files.value.find(file => file.id === selected.value?.id)
+    if (current) Object.assign(current, response.data.file)
+    Object.assign(selected.value, response.data.file)
+    originalContent.value = editorContent.value
+    ElMessage.success(response.data.detail || '文件保存成功')
+  } catch (error: any) { ElMessage.error(error.response?.data?.detail || '保存文件失败') }
+  finally { saving.value = false }
+}
+async function canCloseEditor() {
+  if (!editorDirty.value) return true
+  try {
+    await ElMessageBox.confirm('文件有未保存的修改，确定放弃吗？', '放弃修改', { confirmButtonText: '放弃', cancelButtonText: '继续编辑', type: 'warning' })
+    return true
+  } catch { return false }
+}
+async function cancelEditor() { if (await canCloseEditor()) editorVisible.value = false }
+async function beforeEditorClose(done: () => void) { if (!saving.value && await canCloseEditor()) done() }
 function fullPath(file: RemoteFile) { return file.relative_path.startsWith('/') ? file.relative_path : `${configById.value.get(file.file_config_id)?.file_path.replace(/\/+$/, '') || ''}/${file.relative_path}` }
 function formatSize(size: number) { if (size < 1024) return `${size} B`; if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`; return `${(size / 1024 / 1024).toFixed(1)} MB` }
 function formatDate(value: string | null) { return value ? new Date(value).toLocaleString('zh-CN') : '—' }
@@ -201,6 +263,7 @@ onMounted(loadFiles)
 .folder-file-table :deep(td.el-table__cell) { height: 70px; }
 .folder-file-table :deep(.cell) { padding-left: 18px; padding-right: 14px; }
 .browser-file-name { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.browser-file-name { cursor: pointer; }
 .browser-file-name > div { min-width: 0; }
 .browser-file-name strong, .browser-file-name small { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .browser-file-name strong { color: #38475a; font-weight: 600; font-size: 15px; }
@@ -208,6 +271,15 @@ onMounted(loadFiles)
 .folder-content-footer { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px; padding: 14px 22px; border-top: 1px solid #edf0f4; color: #939ca9; font-size: 13px; }
 .folder-notice { padding: 10px 22px; color: #b88230; background: #fdf6ec; font-size: 14px; }
 .file-detail-path { overflow-wrap: anywhere; }
+.file-editor-heading { display: flex; align-items: center; justify-content: space-between; gap: 18px; padding-right: 28px; }
+.file-editor-heading > div { min-width: 0; }
+.file-editor-heading strong, .file-editor-heading small { display: block; }
+.file-editor-heading strong { color: #24364d; font-size: 18px; }
+.file-editor-heading small { margin-top: 5px; color: #8995a5; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.file-editor-body { min-height: 420px; }
+.file-editor-dialog :deep(.el-dialog__body) { padding: 8px 20px 12px; }
+.file-editor-dialog :deep(.el-dialog__footer) { display: flex; align-items: center; justify-content: flex-end; gap: 10px; }
+.editor-shortcut { margin-right: auto; color: #8b96a6; font-size: 12px; }
 @media (max-width: 1100px) { .file-browser { grid-template-columns: 240px minmax(0, 1fr); gap: 12px; } }
 @media (max-width: 760px) { .file-browser { grid-template-columns: minmax(0, 1fr); } .folder-tree-scroll { min-height: 100px; max-height: 260px; } .folder-content { min-height: 420px; } }
 </style>

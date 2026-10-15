@@ -289,6 +289,26 @@ class FileConfigActionTests(APITestCase):
         self.config.refresh_from_db()
         self.assertEqual(self.config.machine_name, "new name")
 
+    @patch("dashboard.views.read_remote_file", return_value="server:\n  port: 8080\n")
+    def test_file_content_can_be_opened(self, read_remote_file):
+        remote_file = self.snapshot()
+        response = self.client.get(f"/api/file-lists/{remote_file.pk}/")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["content"], "server:\n  port: 8080\n")
+        self.assertEqual(response.data["encoding"], "utf-8")
+        read_remote_file.assert_called_once()
+
+    @patch("dashboard.views.write_remote_file")
+    def test_file_content_can_be_saved(self, write_remote_file):
+        remote_file = self.snapshot()
+        write_remote_file.return_value = SimpleNamespace(st_size=18, st_mtime=1_700_000_000)
+        response = self.client.patch(f"/api/file-lists/{remote_file.pk}/", {"content": "server:\n  port: 80\n"})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["file"]["size"], 18)
+        remote_file.refresh_from_db()
+        self.assertEqual(remote_file.size, 18)
+        write_remote_file.assert_called_once()
+
 
 class SSHTests(SimpleTestCase):
     def entry(self, name, directory=False):
@@ -371,6 +391,33 @@ class SSHTests(SimpleTestCase):
         files = ssh.list_remote_files(self.config(), client=client)
         self.assertEqual(len(files), 1)
         client.open_sftp.return_value.listdir_attr.assert_not_called()
+
+    def test_remote_text_file_can_be_read_as_utf8(self):
+        client = MagicMock()
+        sftp = client.open_sftp.return_value
+        sftp.stat.return_value = self.entry("app.yaml")
+        sftp.file.return_value.__enter__.return_value.read.return_value = "名称: 示例\n".encode()
+        remote_file = SimpleNamespace(file_config=self.config(), relative_path="app.yaml")
+        self.assertEqual(ssh.read_remote_file(remote_file, client=client), "名称: 示例\n")
+        sftp.file.assert_called_once_with("/srv/config/app.yaml", "rb")
+        client.close.assert_called_once()
+
+    def test_remote_text_file_is_saved_with_atomic_rename(self):
+        client = MagicMock()
+        sftp = client.open_sftp.return_value
+        original = self.entry("app.yaml")
+        original.st_mode = stat.S_IFREG | 0o640
+        updated = self.entry("app.yaml")
+        updated.st_size = 12
+        sftp.stat.side_effect = [original, updated]
+        remote_file = SimpleNamespace(file_config=self.config(), relative_path="app.yaml")
+        attrs = ssh.write_remote_file(remote_file, "name: demo\n", client=client)
+        self.assertEqual(attrs.st_size, 12)
+        handle = sftp.file.return_value.__enter__.return_value
+        handle.write.assert_called_once_with(b"name: demo\n")
+        sftp.chmod.assert_called_once()
+        sftp.posix_rename.assert_called_once()
+        client.close.assert_called_once()
 
     @patch("dashboard.ssh.paramiko.SSHClient")
     def test_unauthenticated_transport_is_not_a_success(self, ssh_client):

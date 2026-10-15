@@ -7,6 +7,7 @@ from .views import (
     file_config_detail,
     file_config_refresh,
     file_config_test_connection,
+    file_content,
     file_lists,
     health,
     login,
@@ -31,4 +32,5 @@ urlpatterns = [
     path("file-configs/<int:config_id>/test-connection/", file_config_test_connection, name="file-config-test"),
     path("file-configs/<int:config_id>/refresh/", file_config_refresh, name="file-config-refresh"),
     path("file-lists/", file_lists, name="file-lists"),
+    path("file-lists/<int:file_id>/", file_content, name="file-content"),
 ]

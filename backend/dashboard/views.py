@@ -1,4 +1,4 @@
-from datetime import timedelta
+from datetime import datetime, timedelta
 from django.contrib.auth import authenticate, get_user_model
 from django.contrib.auth.models import User
 from django.db import IntegrityError, transaction
@@ -15,7 +15,7 @@ from rest_framework import status
 
 from .models import Account, FileConfig, RemoteFile
 from .security import decrypt_value, encrypt_value
-from .ssh import connect, list_remote_files, test_connection
+from .ssh import connect, list_remote_files, read_remote_file, test_connection, write_remote_file
 
 
 UserModel = get_user_model()
@@ -460,6 +460,32 @@ def file_lists(request):
     if project:
         queryset = queryset.filter(project__icontains=project)
     return Response([serialize_remote_file(item) for item in queryset])
+
+
+@api_view(["GET", "PATCH"])
+@authentication_classes([TokenAuthentication])
+@permission_classes([IsAuthenticated])
+def file_content(request, file_id):
+    try:
+        remote_file = RemoteFile.objects.select_related("file_config").get(id=file_id)
+    except RemoteFile.DoesNotExist:
+        return Response({"detail": "文件不存在，请刷新文件列表"}, status=status.HTTP_404_NOT_FOUND)
+
+    try:
+        if request.method == "GET":
+            content = read_remote_file(remote_file)
+            return Response({"file": serialize_remote_file(remote_file), "content": content, "encoding": "utf-8"})
+
+        content = request.data.get("content")
+        if not isinstance(content, str):
+            return Response({"detail": "文件内容格式无效"}, status=status.HTTP_400_BAD_REQUEST)
+        attrs = write_remote_file(remote_file, content)
+        remote_file.size = attrs.st_size
+        remote_file.modified_at = timezone.make_aware(datetime.fromtimestamp(attrs.st_mtime)) if attrs.st_mtime else None
+        remote_file.save(update_fields=["size", "modified_at", "fetched_at"])
+        return Response({"detail": "文件保存成功", "file": serialize_remote_file(remote_file)})
+    except Exception as error:
+        return Response({"detail": str(error)}, status=status.HTTP_400_BAD_REQUEST)
 
 
 @api_view(["GET"])

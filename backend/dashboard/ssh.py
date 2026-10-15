@@ -2,11 +2,15 @@ from datetime import datetime
 from io import StringIO
 import posixpath
 import stat
+from uuid import uuid4
 
 import paramiko
 from django.utils import timezone
 
 from .security import decrypt_value
+
+
+MAX_REMOTE_TEXT_BYTES = 2 * 1024 * 1024
 
 
 def connect(file_config):
@@ -96,6 +100,78 @@ def list_remote_files(file_config, client=None):
                 results.append(_file_info(file_config, root, relative, attrs))
         return results
     finally:
+        try:
+            if sftp is not None:
+                sftp.close()
+        finally:
+            client.close()
+
+
+def _remote_path(remote_file):
+    base_path = remote_file.file_config.file_path.rstrip("/") or "/"
+    relative_path = remote_file.relative_path
+    path = posixpath.normpath(relative_path if relative_path.startswith("/") else posixpath.join(base_path, relative_path))
+    if not relative_path.startswith("/") and base_path != "/" and path != base_path and not path.startswith(base_path + "/"):
+        raise ValueError("文件路径超出配置目录")
+    return path
+
+
+def read_remote_file(remote_file, client=None):
+    client = client if client is not None else connect(remote_file.file_config)
+    sftp = None
+    try:
+        sftp = client.open_sftp()
+        path = _remote_path(remote_file)
+        attrs = sftp.stat(path)
+        if attrs.st_size > MAX_REMOTE_TEXT_BYTES:
+            raise ValueError("文件超过 2 MB，暂不支持在线编辑")
+        with sftp.file(path, "rb") as handle:
+            data = handle.read(MAX_REMOTE_TEXT_BYTES + 1)
+        if len(data) > MAX_REMOTE_TEXT_BYTES:
+            raise ValueError("文件超过 2 MB，暂不支持在线编辑")
+        if b"\x00" in data:
+            raise ValueError("该文件可能是二进制文件，无法在线编辑")
+        try:
+            return data.decode("utf-8-sig")
+        except UnicodeDecodeError as error:
+            raise ValueError("文件不是 UTF-8 编码，暂不支持在线编辑") from error
+    finally:
+        try:
+            if sftp is not None:
+                sftp.close()
+        finally:
+            client.close()
+
+
+def write_remote_file(remote_file, content, client=None):
+    data = content.encode("utf-8")
+    if len(data) > MAX_REMOTE_TEXT_BYTES:
+        raise ValueError("文件超过 2 MB，暂不支持在线编辑")
+    client = client if client is not None else connect(remote_file.file_config)
+    sftp = None
+    temp_path = None
+    try:
+        sftp = client.open_sftp()
+        path = _remote_path(remote_file)
+        attrs = sftp.stat(path)
+        temp_path = f"{path}.confighub-{uuid4().hex}.tmp"
+        with sftp.file(temp_path, "wb") as handle:
+            handle.write(data)
+            handle.flush()
+        sftp.chmod(temp_path, stat.S_IMODE(attrs.st_mode))
+        if hasattr(sftp, "posix_rename"):
+            sftp.posix_rename(temp_path, path)
+        else:
+            sftp.remove(path)
+            sftp.rename(temp_path, path)
+        temp_path = None
+        return sftp.stat(path)
+    finally:
+        if sftp is not None and temp_path is not None:
+            try:
+                sftp.remove(temp_path)
+            except Exception:
+                pass
         try:
             if sftp is not None:
                 sftp.close()
