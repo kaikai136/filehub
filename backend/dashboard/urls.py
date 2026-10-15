@@ -1,0 +1,34 @@
+from django.urls import path
+from .views import (
+    dashboard,
+    accounts,
+    account_detail,
+    file_configs,
+    file_config_detail,
+    file_config_refresh,
+    file_config_test_connection,
+    file_lists,
+    health,
+    login,
+    logout,
+    me,
+    user_detail,
+    users,
+)
+
+urlpatterns = [
+    path("health/", health, name="health"),
+    path("auth/login/", login, name="login"),
+    path("auth/logout/", logout, name="logout"),
+    path("auth/me/", me, name="me"),
+    path("users/", users, name="users"),
+    path("users/<int:user_id>/", user_detail, name="user-detail"),
+    path("dashboard/", dashboard, name="dashboard"),
+    path("accounts/", accounts, name="accounts"),
+    path("accounts/<int:account_id>/", account_detail, name="account-detail"),
+    path("file-configs/", file_configs, name="file-configs"),
+    path("file-configs/<int:config_id>/", file_config_detail, name="file-config-detail"),
+    path("file-configs/<int:config_id>/test-connection/", file_config_test_connection, name="file-config-test"),
+    path("file-configs/<int:config_id>/refresh/", file_config_refresh, name="file-config-refresh"),
+    path("file-lists/", file_lists, name="file-lists"),
+]

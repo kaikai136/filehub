@@ -1,0 +1,501 @@
+from datetime import timedelta
+from django.contrib.auth import authenticate, get_user_model
+from django.contrib.auth.models import User
+from django.db import IntegrityError, transaction
+from django.db.models import Count, F
+from django.utils.dateparse import parse_datetime
+from django.utils import timezone
+from rest_framework.exceptions import ValidationError
+from rest_framework.authtoken.models import Token
+from rest_framework.decorators import api_view, authentication_classes, permission_classes
+from rest_framework.authentication import TokenAuthentication
+from rest_framework.permissions import AllowAny, IsAuthenticated
+from rest_framework.response import Response
+from rest_framework import status
+
+from .models import Account, FileConfig, RemoteFile
+from .security import decrypt_value, encrypt_value
+from .ssh import connect, list_remote_files, test_connection
+
+
+UserModel = get_user_model()
+
+
+def serialize_user(user):
+    return {
+        "id": user.id,
+        "username": user.username,
+        "email": user.email,
+        "name": user.get_full_name() or user.username,
+        "is_active": user.is_active,
+        "is_staff": user.is_staff,
+        "is_superuser": user.is_superuser,
+        "date_joined": user.date_joined.isoformat(),
+        "last_login": user.last_login.isoformat() if user.last_login else None,
+    }
+
+
+def serialize_account(account):
+    return {
+        "id": account.id,
+        "name": account.name,
+        "username": account.username,
+        "note": account.note,
+        "is_active": account.is_active,
+        "has_password": bool(account.encrypted_password),
+        "has_private_key": bool(account.encrypted_private_key),
+        "created_at": account.created_at.isoformat(),
+        "updated_at": account.updated_at.isoformat(),
+    }
+
+
+def serialize_file_config(config):
+    return {
+        "id": config.id,
+        "project": config.project,
+        "host_name": config.host_name,
+        "ip_address": config.ip_address,
+        "machine_name": config.machine_name,
+        "port": config.port,
+        "file_path": config.file_path,
+        "directory_paths": config.directory_paths,
+        "account_id": config.account_id,
+        "account_name": config.ssh_account.name,
+        "revision": config.revision,
+        "status": config.status,
+        "connection_status": config.connection_status,
+        "connection_error": config.connection_error,
+        "last_verified_at": config.last_verified_at.isoformat() if config.last_verified_at else None,
+        "fetch_status": config.fetch_status,
+        "fetch_error": config.fetch_error,
+        "file_count": config.file_count if hasattr(config, "file_count") else config.remote_files.count(),
+        "last_fetched_at": config.last_fetched_at.isoformat() if config.last_fetched_at else None,
+        "last_error": config.last_error,
+        "created_at": config.created_at.isoformat(),
+        "updated_at": config.updated_at.isoformat(),
+    }
+
+
+def serialize_remote_file(remote_file):
+    return {
+        "id": remote_file.id,
+        "file_config_id": remote_file.file_config_id,
+        "project": remote_file.project,
+        "name": remote_file.name,
+        "relative_path": remote_file.relative_path,
+        "file_type": remote_file.file_type,
+        "size": remote_file.size,
+        "modified_at": remote_file.modified_at.isoformat() if remote_file.modified_at else None,
+        "fetched_at": remote_file.fetched_at.isoformat(),
+    }
+
+
+def ensure_development_admin():
+    if not UserModel.objects.exists():
+        return UserModel.objects.create_superuser(
+            username="admin",
+            password="admin123",
+            email="admin@confighub.local",
+        )
+    return None
+
+
+@api_view(["GET"])
+@authentication_classes([TokenAuthentication])
+@permission_classes([IsAuthenticated])
+def health(request):
+    return Response({"status": "ok", "service": "ConfigHub API"})
+
+
+@api_view(["POST"])
+@permission_classes([AllowAny])
+def login(request):
+    username = str(request.data.get("username", "")).strip()
+    password = str(request.data.get("password", ""))
+    ensure_development_admin()
+    user = authenticate(request, username=username, password=password)
+    if not user:
+        return Response({"detail": "用户名或密码错误"}, status=status.HTTP_400_BAD_REQUEST)
+    if not user.is_active:
+        return Response({"detail": "该用户已被禁用"}, status=status.HTTP_403_FORBIDDEN)
+    token, _ = Token.objects.get_or_create(user=user)
+    return Response({"token": token.key, "user": serialize_user(user)})
+
+
+@api_view(["POST"])
+@authentication_classes([TokenAuthentication])
+@permission_classes([IsAuthenticated])
+def logout(request):
+    Token.objects.filter(user=request.user).delete()
+    return Response({"detail": "已退出登录"})
+
+
+@api_view(["GET"])
+@authentication_classes([TokenAuthentication])
+@permission_classes([IsAuthenticated])
+def me(request):
+    return Response(serialize_user(request.user))
+
+
+@api_view(["GET", "POST"])
+@authentication_classes([TokenAuthentication])
+@permission_classes([IsAuthenticated])
+def users(request):
+    if not request.user.is_staff:
+        return Response({"detail": "仅管理员可以管理用户"}, status=status.HTTP_403_FORBIDDEN)
+    if request.method == "GET":
+        return Response([serialize_user(user) for user in UserModel.objects.order_by("-date_joined")])
+
+    username = str(request.data.get("username", "")).strip()
+    password = str(request.data.get("password", ""))
+    if not username or len(password) < 6:
+        return Response({"detail": "用户名不能为空，密码至少 6 位"}, status=status.HTTP_400_BAD_REQUEST)
+    if UserModel.objects.filter(username=username).exists():
+        return Response({"detail": "用户名已存在"}, status=status.HTTP_400_BAD_REQUEST)
+    user = UserModel.objects.create_user(
+        username=username,
+        password=password,
+        email=str(request.data.get("email", "")).strip(),
+        first_name=str(request.data.get("name", "")).strip(),
+        is_active=bool(request.data.get("is_active", True)),
+        is_staff=bool(request.data.get("is_staff", False)),
+    )
+    return Response(serialize_user(user), status=status.HTTP_201_CREATED)
+
+
+@api_view(["PATCH", "DELETE"])
+@authentication_classes([TokenAuthentication])
+@permission_classes([IsAuthenticated])
+def user_detail(request, user_id):
+    if not request.user.is_staff:
+        return Response({"detail": "仅管理员可以管理用户"}, status=status.HTTP_403_FORBIDDEN)
+    try:
+        user = UserModel.objects.get(id=user_id)
+    except UserModel.DoesNotExist:
+        return Response({"detail": "用户不存在"}, status=status.HTTP_404_NOT_FOUND)
+    if request.method == "DELETE":
+        if user.id == request.user.id:
+            return Response({"detail": "不能删除当前登录用户"}, status=status.HTTP_400_BAD_REQUEST)
+        user.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+    if "email" in request.data:
+        user.email = str(request.data["email"]).strip()
+    if "name" in request.data:
+        user.first_name = str(request.data["name"]).strip()
+    if "is_active" in request.data and user.id != request.user.id:
+        user.is_active = bool(request.data["is_active"])
+    if request.data.get("password"):
+        if len(str(request.data["password"])) < 6:
+            return Response({"detail": "密码至少 6 位"}, status=status.HTTP_400_BAD_REQUEST)
+        user.set_password(str(request.data["password"]))
+    user.save()
+    if not user.is_active:
+        Token.objects.filter(user=user).delete()
+    return Response(serialize_user(user))
+
+
+@api_view(["GET", "POST"])
+@authentication_classes([TokenAuthentication])
+@permission_classes([IsAuthenticated])
+def accounts(request):
+    if request.method == "GET":
+        query = str(request.query_params.get("search", "")).strip()
+        queryset = Account.objects.all()
+        if query:
+            queryset = queryset.filter(name__icontains=query) | queryset.filter(username__icontains=query)
+        return Response([serialize_account(account) for account in queryset])
+
+    data = request.data
+    if not data.get("name") or not data.get("username"):
+        return Response({"detail": "账号名称和用户不能为空"}, status=status.HTTP_400_BAD_REQUEST)
+    account = Account.objects.create(
+        name=str(data["name"]).strip(),
+        username=str(data["username"]).strip(),
+        encrypted_password=encrypt_value(str(data.get("password", ""))),
+        encrypted_private_key=encrypt_value(str(data.get("private_key", ""))),
+        note=str(data.get("note", "")).strip(),
+        is_active=bool(data.get("is_active", True)),
+    )
+    return Response(serialize_account(account), status=status.HTTP_201_CREATED)
+
+
+@api_view(["PATCH", "DELETE"])
+@authentication_classes([TokenAuthentication])
+@permission_classes([IsAuthenticated])
+def account_detail(request, account_id):
+    try:
+        account = Account.objects.get(id=account_id)
+    except Account.DoesNotExist:
+        return Response({"detail": "账号不存在"}, status=status.HTTP_404_NOT_FOUND)
+    if request.method == "DELETE":
+        if account.file_configs.exists():
+            return Response({"detail": "该账号已被文件管理配置引用，请先解除引用"}, status=status.HTTP_409_CONFLICT)
+        account.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+    data = request.data
+    for field in ("name", "username", "note"):
+        if field in data:
+            setattr(account, field, str(data[field]).strip())
+    if "is_active" in data:
+        account.is_active = bool(data["is_active"])
+    if "password" in data and str(data["password"]):
+        account.encrypted_password = encrypt_value(str(data["password"]))
+    if "private_key" in data and str(data["private_key"]):
+        account.encrypted_private_key = encrypt_value(str(data["private_key"]))
+    account.save()
+    return Response(serialize_account(account))
+
+
+def _get_account(account_id):
+    try:
+        return Account.objects.get(id=account_id)
+    except Account.DoesNotExist as error:
+        raise ValueError("关联账号不存在") from error
+
+
+@api_view(["GET", "POST"])
+@authentication_classes([TokenAuthentication])
+@permission_classes([IsAuthenticated])
+def file_configs(request):
+    if request.method == "GET":
+        query = str(request.query_params.get("search", "")).strip()
+        queryset = FileConfig.objects.select_related("account").annotate(file_count=Count("remote_files"))
+        if query:
+            queryset = queryset.filter(project__icontains=query) | queryset.filter(host_name__icontains=query) | queryset.filter(ip_address__icontains=query)
+        return Response([serialize_file_config(config) for config in queryset])
+
+    data = request.data
+    required = ("project", "host_name", "ip_address", "machine_name", "file_path", "account_id")
+    if any(not data.get(field) for field in required):
+        return Response({"detail": "项目、主机名称、IP 地址、机器名称、文件路径和账号不能为空"}, status=status.HTTP_400_BAD_REQUEST)
+    try:
+        account = _get_account(data["account_id"])
+        config = FileConfig.objects.create(
+            project=str(data["project"]).strip(),
+            host_name=str(data["host_name"]).strip(),
+            ip_address=str(data["ip_address"]).strip(),
+            machine_name=str(data["machine_name"]).strip(),
+            port=int(data.get("port", 22)),
+            file_path=str(data["file_path"]).strip(),
+            account=account,
+        )
+    except (ValueError, TypeError) as error:
+        return Response({"detail": str(error)}, status=status.HTTP_400_BAD_REQUEST)
+    return Response(serialize_file_config(config), status=status.HTTP_201_CREATED)
+
+
+@api_view(["PATCH", "DELETE"])
+@authentication_classes([TokenAuthentication])
+@permission_classes([IsAuthenticated])
+def file_config_detail(request, config_id):
+    try:
+        config = FileConfig.objects.select_related("account").get(id=config_id)
+    except FileConfig.DoesNotExist:
+        return Response({"detail": "文件管理配置不存在"}, status=status.HTTP_404_NOT_FOUND)
+    if request.method == "DELETE":
+        config.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+    data = request.data
+    if "revision" in data and data["revision"] != config.revision:
+        return Response({"detail": "此记录已更新，请重新打开后编辑"}, status=status.HTTP_409_CONFLICT)
+    old_connection = (config.ip_address, config.port, config.account_id, config.account_snapshot.copy())
+    old_path = config.file_path
+    old_project = config.project
+    for field in ("project", "host_name", "ip_address", "machine_name", "file_path"):
+        if field in data:
+            setattr(config, field, str(data[field]).strip())
+    if "port" in data:
+        config.port = int(data["port"])
+    if "account_id" in data:
+        try:
+            config.bind_account(_get_account(data["account_id"]))
+        except ValueError as error:
+            return Response({"detail": str(error)}, status=status.HTTP_400_BAD_REQUEST)
+    connection_changed = old_connection != (config.ip_address, config.port, config.account_id, config.account_snapshot)
+    if connection_changed:
+        config.connection_status = "pending"
+        config.connection_error = ""
+        config.last_verified_at = None
+    with transaction.atomic():
+        # Reject stale editors rather than saving an old copy over another request.
+        current = FileConfig.objects.select_for_update().get(pk=config.pk)
+        if current.revision != config.revision:
+            return Response({"detail": "此记录已更新，请重新打开后编辑"}, status=status.HTTP_409_CONFLICT)
+        config.revision += 1
+        fields = [
+            "project", "host_name", "ip_address", "machine_name", "port", "file_path",
+            "account", "account_snapshot", "revision", "updated_at",
+        ]
+        if connection_changed:
+            fields += ["connection_status", "connection_error", "last_verified_at"]
+        if connection_changed or old_path != config.file_path:
+            config.fetch_status = "pending"
+            config.fetch_error = ""
+            config.last_fetched_at = None
+            config.status = "pending"
+            config.last_error = ""
+            config.remote_files.all().delete()
+            config.directory_paths = []
+            fields += ["directory_paths"]
+            fields += ["fetch_status", "fetch_error", "last_fetched_at", "status", "last_error"]
+        elif old_project != config.project:
+            config.remote_files.update(project=config.project)
+        config.save(update_fields=fields)
+    config.refresh_from_db()
+    return Response(serialize_file_config(config))
+
+
+def _stale_action_response(config):
+    current = FileConfig.objects.filter(pk=config.pk).first()
+    data = {"detail": "配置已更新，已忽略旧操作结果，请重新操作"}
+    if current:
+        data["config"] = serialize_file_config(current)
+    return Response(data, status=status.HTTP_409_CONFLICT)
+
+
+def _store_remote_result(config, fields, files=None):
+    with transaction.atomic():
+        current = FileConfig.objects.select_for_update().filter(pk=config.pk).first()
+        if current is None or current.revision != config.revision:
+            return False
+        if files is not None:
+            current.remote_files.all().delete()
+            RemoteFile.objects.bulk_create([RemoteFile(file_config=current, **item) for item in files])
+            config.directory_paths = sorted(getattr(files, "directory_paths", []))
+            fields = [*fields, "directory_paths"]
+        for field in fields:
+            setattr(current, field, getattr(config, field))
+        current.save(update_fields=[*fields, "updated_at"])
+    config.refresh_from_db()
+    return True
+
+
+def _run_remote_action(config, refresh=False):
+    # Each operation owns a revision of this record; edits and newer actions supersede it.
+    if not FileConfig.objects.filter(pk=config.pk, revision=config.revision).update(revision=F("revision") + 1):
+        return _stale_action_response(config)
+    config.revision += 1
+    # SSH authentication is independent of SFTP and the configured file path.
+    try:
+        if refresh:
+            client = connect(config)
+        else:
+            test_connection(config)
+    except Exception as error:
+        config.connection_status = "error"
+        config.connection_error = str(error)
+        config.status = "error"
+        config.last_error = str(error)
+        fields = ["connection_status", "connection_error", "status", "last_error"]
+        if refresh:
+            config.fetch_status = "error"
+            config.fetch_error = str(error)
+            fields += ["fetch_status", "fetch_error"]
+        if not _store_remote_result(config, fields):
+            return _stale_action_response(config)
+        return Response({"detail": str(error), "config": serialize_file_config(config)}, status=status.HTTP_400_BAD_REQUEST)
+    config.connection_status = "success"
+    config.connection_error = ""
+    config.last_verified_at = timezone.now()
+    if not _store_remote_result(config, ["connection_status", "connection_error", "last_verified_at"]):
+        if refresh:
+            client.close()
+        return _stale_action_response(config)
+    if not refresh:
+        return Response({"detail": "SSH 登录验证成功", "config": serialize_file_config(config)})
+    try:
+        files = list_remote_files(config, client=client)
+        config.fetch_status = "success"
+        config.fetch_error = ""
+        config.last_fetched_at = timezone.now()
+        config.status = "success"
+        config.last_error = ""
+        if not _store_remote_result(config, ["fetch_status", "fetch_error", "last_fetched_at", "status", "last_error"], files=files):
+            return _stale_action_response(config)
+    except Exception as error:
+        config.fetch_status = "error"
+        config.fetch_error = str(error)
+        config.status = "error"
+        config.last_error = str(error)
+        if not _store_remote_result(config, ["fetch_status", "fetch_error", "status", "last_error"]):
+            return _stale_action_response(config)
+        return Response({"detail": str(error), "config": serialize_file_config(config)}, status=status.HTTP_400_BAD_REQUEST)
+    return Response({
+        "detail": f"文件列表获取成功，共 {len(files)} 个文件",
+        "file_count": len(files),
+        "config": serialize_file_config(config),
+        "files": [serialize_remote_file(item) for item in config.remote_files.all()],
+    })
+
+
+@api_view(["POST"])
+@authentication_classes([TokenAuthentication])
+@permission_classes([IsAuthenticated])
+def file_config_test_connection(request, config_id):
+    try:
+        config = FileConfig.objects.select_related("account").get(id=config_id)
+    except FileConfig.DoesNotExist:
+        return Response({"detail": "文件管理配置不存在"}, status=status.HTTP_404_NOT_FOUND)
+    return _run_remote_action(config)
+
+
+@api_view(["POST"])
+@authentication_classes([TokenAuthentication])
+@permission_classes([IsAuthenticated])
+def file_config_refresh(request, config_id):
+    try:
+        config = FileConfig.objects.select_related("account").get(id=config_id)
+    except FileConfig.DoesNotExist:
+        return Response({"detail": "文件管理配置不存在"}, status=status.HTTP_404_NOT_FOUND)
+    return _run_remote_action(config, refresh=True)
+
+
+@api_view(["GET"])
+@authentication_classes([TokenAuthentication])
+@permission_classes([IsAuthenticated])
+def file_lists(request):
+    queryset = RemoteFile.objects.select_related("file_config")
+    project = str(request.query_params.get("project", "")).strip()
+    if project:
+        queryset = queryset.filter(project__icontains=project)
+    return Response([serialize_remote_file(item) for item in queryset])
+
+
+@api_view(["GET"])
+@authentication_classes([TokenAuthentication])
+@permission_classes([IsAuthenticated])
+def dashboard(request):
+    now = timezone.localtime()
+    labels = [(now.replace(minute=0, second=0, microsecond=0) - timedelta(hours=11 - i)).strftime("%H:%M") for i in range(12)]
+    return Response({
+        "server": {
+            "name": "config-hub-01",
+            "address": "192.168.1.100",
+            "os": "Ubuntu 24.04 LTS",
+            "uptime": "12 天 8 小时",
+            "status": "online",
+        },
+        "metrics": [
+            {"key": "cpu", "label": "CPU 使用率", "value": 32, "unit": "%", "color": "#409eff", "trend": "+2.4%"},
+            {"key": "memory", "label": "内存使用", "value": 6.8, "unit": " / 16 GB", "color": "#67c23a", "trend": "-0.8 GB"},
+            {"key": "disk", "label": "磁盘空间", "value": 42, "unit": "%", "color": "#e6a23c", "trend": "128 / 500 GB"},
+            {"key": "network", "label": "网络流量", "value": 18.6, "unit": " MB/s", "color": "#f56c6c", "trend": "↑ 12.4  ↓ 6.2"},
+        ],
+        "chart": {
+            "labels": labels,
+            "cpu": [22, 28, 25, 34, 31, 42, 36, 29, 33, 27, 35, 32],
+            "memory": [41, 43, 42, 44, 43, 46, 45, 44, 43, 45, 44, 43],
+        },
+        "services": [
+            {"name": "Nginx", "description": "Web 服务器", "status": "运行中", "version": "1.26.2", "icon": "Connection", "color": "#e8f4ff"},
+            {"name": "MySQL", "description": "关系型数据库", "status": "运行中", "version": "8.0.40", "icon": "Coin", "color": "#fff3e0"},
+            {"name": "Docker", "description": "容器引擎", "status": "运行中", "version": "27.3.1", "icon": "Box", "color": "#e8f7ef"},
+            {"name": "Redis", "description": "缓存服务", "status": "运行中", "version": "7.4.1", "icon": "Grid", "color": "#fdecec"},
+        ],
+        "activity": [
+            {"title": "系统服务启动完成", "detail": "Nginx 服务已启动", "time": "10:42:18", "type": "success"},
+            {"title": "配置文件已更新", "detail": "nginx.conf 配置已保存", "time": "09:36:05", "type": "primary"},
+            {"title": "系统安全检查", "detail": "未发现风险项", "time": "08:15:32", "type": "success"},
+        ],
+    })
