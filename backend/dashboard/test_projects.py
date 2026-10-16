@@ -9,7 +9,7 @@ from django.test import SimpleTestCase
 from openpyxl import Workbook, load_workbook
 from rest_framework.test import APITestCase, APIClient
 
-from .models import Account, FileConfig, Project, RemoteFile
+from .models import Account, FileConfig, Project, RemoteFile, Role
 from .projects import save_project
 from .project_transfer import IMPORT_COLUMNS, validate_rows
 
@@ -17,6 +17,7 @@ from .project_transfer import IMPORT_COLUMNS, validate_rows
 class ProjectManagementTests(APITestCase):
     def setUp(self):
         self.user = get_user_model().objects.create_user(username='project-user')
+        self.user.roles.add(Role.objects.get(code='administrator'))
         self.client.force_authenticate(self.user)
         self.account = Account.objects.create(name='SSH', username='root')
         self.config = FileConfig.objects.create(

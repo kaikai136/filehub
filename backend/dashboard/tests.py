@@ -8,14 +8,16 @@ from django.test import SimpleTestCase
 from django.utils import timezone
 from rest_framework.test import APITestCase
 
-from .models import Account, FileConfig, RemoteFile
+from .models import Account, FileConfig, RemoteFile, Role
 from .security import decrypt_value, encrypt_value
 from . import ssh
 
 
 class FileConfigActionTests(APITestCase):
     def setUp(self):
-        self.client.force_authenticate(get_user_model().objects.create_user(username="tester"))
+        user = get_user_model().objects.create_user(username="tester")
+        user.roles.add(Role.objects.get(code='administrator'))
+        self.client.force_authenticate(user)
         self.account = Account.objects.create(name="SSH", username="root")
         self.config = FileConfig.objects.create(
             project="demo", host_name="host", ip_address="192.0.2.1",

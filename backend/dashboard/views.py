@@ -1,5 +1,6 @@
 from datetime import datetime, timedelta
 from django.contrib.auth import authenticate, get_user_model
+from django.contrib.auth.models import update_last_login
 from django.contrib.auth.models import User
 from django.db import IntegrityError, transaction
 from django.db.models import Count, F
@@ -14,6 +15,8 @@ from rest_framework.response import Response
 from rest_framework import status
 
 from .models import Account, FileConfig, RemoteFile
+from .permissions import role_permissions
+from .rbac import require_any_permission, require_config_access, require_method_permissions, require_permission, require_superuser
 from .security import decrypt_value, encrypt_value
 from .ssh import connect, list_remote_files, read_remote_file, test_connection, write_remote_file
 from .projects import resolve_project, validate_config
@@ -33,6 +36,8 @@ def serialize_user(user):
         "is_superuser": user.is_superuser,
         "date_joined": user.date_joined.isoformat(),
         "last_login": user.last_login.isoformat() if user.last_login else None,
+        "roles": [{"id": role.id, "name": role.name, "code": role.code, "is_active": role.is_active} for role in user.roles.all()],
+        "permissions": sorted(role_permissions(user)),
     }
 
 
@@ -127,6 +132,8 @@ def login(request):
     if not user.is_active:
         return Response({"detail": "该用户已被禁用"}, status=status.HTTP_403_FORBIDDEN)
     token, _ = Token.objects.get_or_create(user=user)
+    update_last_login(None, user)
+    user.refresh_from_db(fields=["last_login"])
     return Response({"token": token.key, "user": serialize_user(user)})
 
 
@@ -148,63 +155,25 @@ def me(request):
 @api_view(["GET", "POST"])
 @authentication_classes([TokenAuthentication])
 @permission_classes([IsAuthenticated])
+@require_superuser
 def users(request):
-    if not request.user.is_staff:
-        return Response({"detail": "仅管理员可以管理用户"}, status=status.HTTP_403_FORBIDDEN)
-    if request.method == "GET":
-        return Response([serialize_user(user) for user in UserModel.objects.order_by("-date_joined")])
-
-    username = str(request.data.get("username", "")).strip()
-    password = str(request.data.get("password", ""))
-    if not username or len(password) < 6:
-        return Response({"detail": "用户名不能为空，密码至少 6 位"}, status=status.HTTP_400_BAD_REQUEST)
-    if UserModel.objects.filter(username=username).exists():
-        return Response({"detail": "用户名已存在"}, status=status.HTTP_400_BAD_REQUEST)
-    user = UserModel.objects.create_user(
-        username=username,
-        password=password,
-        email=str(request.data.get("email", "")).strip(),
-        first_name=str(request.data.get("name", "")).strip(),
-        is_active=bool(request.data.get("is_active", True)),
-        is_staff=bool(request.data.get("is_staff", False)),
-    )
-    return Response(serialize_user(user), status=status.HTTP_201_CREATED)
+    from .user_management import list_or_create_users
+    return list_or_create_users(request)
 
 
 @api_view(["PATCH", "DELETE"])
 @authentication_classes([TokenAuthentication])
 @permission_classes([IsAuthenticated])
+@require_superuser
 def user_detail(request, user_id):
-    if not request.user.is_staff:
-        return Response({"detail": "仅管理员可以管理用户"}, status=status.HTTP_403_FORBIDDEN)
-    try:
-        user = UserModel.objects.get(id=user_id)
-    except UserModel.DoesNotExist:
-        return Response({"detail": "用户不存在"}, status=status.HTTP_404_NOT_FOUND)
-    if request.method == "DELETE":
-        if user.id == request.user.id:
-            return Response({"detail": "不能删除当前登录用户"}, status=status.HTTP_400_BAD_REQUEST)
-        user.delete()
-        return Response(status=status.HTTP_204_NO_CONTENT)
-    if "email" in request.data:
-        user.email = str(request.data["email"]).strip()
-    if "name" in request.data:
-        user.first_name = str(request.data["name"]).strip()
-    if "is_active" in request.data and user.id != request.user.id:
-        user.is_active = bool(request.data["is_active"])
-    if request.data.get("password"):
-        if len(str(request.data["password"])) < 6:
-            return Response({"detail": "密码至少 6 位"}, status=status.HTTP_400_BAD_REQUEST)
-        user.set_password(str(request.data["password"]))
-    user.save()
-    if not user.is_active:
-        Token.objects.filter(user=user).delete()
-    return Response(serialize_user(user))
+    from .user_management import update_or_delete_user
+    return update_or_delete_user(request, user_id)
 
 
 @api_view(["GET", "POST"])
 @authentication_classes([TokenAuthentication])
 @permission_classes([IsAuthenticated])
+@require_method_permissions({"GET": "accounts.view", "POST": "accounts.create"})
 def accounts(request):
     if request.method == "GET":
         query = str(request.query_params.get("search", "")).strip()
@@ -227,9 +196,18 @@ def accounts(request):
     return Response(serialize_account(account), status=status.HTTP_201_CREATED)
 
 
+@api_view(["GET"])
+@authentication_classes([TokenAuthentication])
+@permission_classes([IsAuthenticated])
+@require_any_permission('projects.create', 'projects.edit', 'projects.import', 'file_configs.edit')
+def account_options(request):
+    return Response([{'id': account.id, 'name': account.name, 'is_active': account.is_active} for account in Account.objects.all()])
+
+
 @api_view(["PATCH", "DELETE"])
 @authentication_classes([TokenAuthentication])
 @permission_classes([IsAuthenticated])
+@require_method_permissions({"PATCH": "accounts.edit", "DELETE": "accounts.delete"})
 def account_detail(request, account_id):
     try:
         account = Account.objects.get(id=account_id)
@@ -265,6 +243,7 @@ def _get_account(account_id):
 @api_view(["GET", "POST"])
 @authentication_classes([TokenAuthentication])
 @permission_classes([IsAuthenticated])
+@require_config_access
 def file_configs(request):
     if request.method == "GET":
         query = str(request.query_params.get("search", "")).strip()
@@ -322,6 +301,7 @@ def file_configs(request):
 @api_view(["PATCH", "DELETE"])
 @authentication_classes([TokenAuthentication])
 @permission_classes([IsAuthenticated])
+@require_config_access
 def file_config_detail(request, config_id):
     try:
         config = FileConfig.objects.select_related("account").get(id=config_id)
@@ -481,6 +461,7 @@ def _run_remote_action(config, refresh=False):
 @api_view(["POST"])
 @authentication_classes([TokenAuthentication])
 @permission_classes([IsAuthenticated])
+@require_permission("file_configs.execute")
 def file_config_test_connection(request, config_id):
     try:
         config = FileConfig.objects.select_related("account").get(id=config_id)
@@ -492,6 +473,7 @@ def file_config_test_connection(request, config_id):
 @api_view(["POST"])
 @authentication_classes([TokenAuthentication])
 @permission_classes([IsAuthenticated])
+@require_permission("file_configs.execute")
 def file_config_refresh(request, config_id):
     try:
         config = FileConfig.objects.select_related("account").get(id=config_id)
@@ -505,6 +487,7 @@ def file_config_refresh(request, config_id):
 @api_view(["GET"])
 @authentication_classes([TokenAuthentication])
 @permission_classes([IsAuthenticated])
+@require_permission("file_lists.view")
 def file_lists(request):
     queryset = RemoteFile.objects.select_related("file_config")
     project = str(request.query_params.get("project", "")).strip()
@@ -516,6 +499,7 @@ def file_lists(request):
 @api_view(["GET", "PATCH"])
 @authentication_classes([TokenAuthentication])
 @permission_classes([IsAuthenticated])
+@require_method_permissions({"GET": "file_lists.view", "PATCH": "file_lists.edit"})
 def file_content(request, file_id):
     try:
         remote_file = RemoteFile.objects.select_related("file_config").get(id=file_id)
@@ -542,6 +526,7 @@ def file_content(request, file_id):
 @api_view(["GET"])
 @authentication_classes([TokenAuthentication])
 @permission_classes([IsAuthenticated])
+@require_permission("dashboard.view")
 def dashboard(request):
     now = timezone.localtime()
     labels = [(now.replace(minute=0, second=0, microsecond=0) - timedelta(hours=11 - i)).strftime("%H:%M") for i in range(12)]

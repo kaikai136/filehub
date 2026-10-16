@@ -30,6 +30,8 @@ export interface User {
   is_superuser: boolean
   date_joined: string
   last_login: string | null
+  roles: { id: number; name: string; code: string; is_active: boolean }[]
+  permissions: string[]
 }
 
 export async function login(username: string, password: string) {

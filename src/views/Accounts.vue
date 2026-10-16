@@ -1,6 +1,6 @@
 <template>
   <div class="page config-page">
-    <div class="page-heading"><div><div class="eyebrow">资源管理</div><h1>账号管理</h1><p>维护 SSH 账号；修改后，在对应机器中选择账号并保存生效，各机器独立更新。</p></div><el-button type="primary" :icon="Plus" @click="openCreate">新增账号</el-button></div>
+    <div class="page-heading"><div><div class="eyebrow">资源管理</div><h1>账号管理</h1><p>维护 SSH 账号；修改后，在对应机器中选择账号并保存生效，各机器独立更新。</p></div><el-button v-if="hasPermission('accounts.create')" type="primary" :icon="Plus" @click="openCreate">新增账号</el-button></div>
     <div class="module-toolbar"><el-input v-model="search" :prefix-icon="Search" placeholder="搜索账号名称或用户" clearable @input="loadAccounts" /><span class="toolbar-count">共 {{ accounts.length }} 个账号</span></div>
     <div class="resource-list config-table">
       <div class="config-header account-grid"><span>账号名称</span><span>用户</span><span>密码</span><span>独立密钥</span><span>备注</span><span>状态</span><span>操作</span></div>
@@ -12,9 +12,9 @@
         <span class="muted-cell">{{ item.note || '无备注' }}</span>
         <el-tag class="account-status" effect="plain" :type="item.is_active ? 'success' : 'info'">{{ item.is_active ? '启用' : '禁用' }}</el-tag>
         <div class="account-actions">
-          <el-tooltip content="编辑账号" placement="top"><el-button text :icon="EditPen" aria-label="编辑账号" :disabled="saving" @click="handleCommand('edit', item)" /></el-tooltip>
-          <el-tooltip :content="item.is_active ? '禁用账号' : '启用账号'" placement="top"><el-button text :icon="item.is_active ? VideoPause : VideoPlay" :aria-label="item.is_active ? '禁用账号' : '启用账号'" :disabled="saving" @click="handleCommand('toggle', item)" /></el-tooltip>
-          <el-tooltip content="删除账号" placement="top"><el-button text type="danger" :icon="Delete" aria-label="删除账号" :disabled="saving" @click="handleCommand('delete', item)" /></el-tooltip>
+          <el-tooltip v-if="hasPermission('accounts.edit')" content="编辑账号" placement="top"><el-button text :icon="EditPen" aria-label="编辑账号" :disabled="saving" @click="handleCommand('edit', item)" /></el-tooltip>
+          <el-tooltip v-if="hasPermission('accounts.edit')" :content="item.is_active ? '禁用账号' : '启用账号'" placement="top"><el-button text :icon="item.is_active ? VideoPause : VideoPlay" :aria-label="item.is_active ? '禁用账号' : '启用账号'" :disabled="saving" @click="handleCommand('toggle', item)" /></el-tooltip>
+          <el-tooltip v-if="hasPermission('accounts.delete')" content="删除账号" placement="top"><el-button text type="danger" :icon="Delete" aria-label="删除账号" :disabled="saving" @click="handleCommand('delete', item)" /></el-tooltip>
         </div>
       </div>
       <el-empty v-if="!accounts.length" description="暂无账号" />
@@ -67,6 +67,7 @@ import { nextTick, onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
 import { Delete, EditPen, Key, Plus, Search, VideoPause, VideoPlay } from '@element-plus/icons-vue'
 import { api } from '../api'
+import { hasPermission } from '../composables/useAuth'
 type Account = { id: number; name: string; username: string; note: string; is_active: boolean; has_password: boolean; has_private_key: boolean }
 const accounts = ref<Account[]>([]); const search = ref(''); const dialogVisible = ref(false); const saving = ref(false); const editing = ref<Account | null>(null); const formRef = ref<FormInstance>()
 const form = reactive({ name: '', username: '', password: '', private_key: '', note: '', is_active: true })

@@ -198,6 +198,18 @@ a { color: inherit; text-decoration: none; }
 .user-list .el-button { color: #929ba7; }
 .user-list .el-tag { width: fit-content; }
 .user-menu-button { border: 0; cursor: pointer; }
+.admin-table { border: 1px solid #e8ebf0; border-radius: 5px; --el-table-header-bg-color: #fafbfd; --el-table-header-text-color: #8e98a5; font-size: 14px; }
+.admin-table th.el-table__cell { height: 40px; font-weight: 400; }
+.admin-table td.el-table__cell { height: 64px; }
+.admin-table .el-tag { width: 64px; height: 32px; }
+.admin-actions { display: flex; align-items: center; gap: 2px; }
+.admin-actions .el-button { padding: 7px; }
+.admin-actions .el-button + .el-button { margin-left: 0; }
+.permission-matrix { width: 100%; border: 1px solid #e8ebf0; border-radius: 6px; overflow: hidden; }
+.permission-group { display: grid; grid-template-columns: 110px minmax(0, 1fr); gap: 12px; padding: 10px 14px; border-bottom: 1px solid #edf0f4; }
+.permission-group:last-child { border-bottom: 0; }
+.permission-group strong { font-weight: 500; color: #52677f; }
+.permission-group .el-checkbox { margin-right: 16px; }
 .config-table { overflow-x: auto; }
 .config-header, .config-row { min-width: 920px; display: grid; align-items: center; gap: 12px; padding: 0 16px; }
 .config-header { min-height: 40px; border-bottom: 1px solid #edf0f4; color: #8e98a5; font-size: 12px; background: #fafbfd; }

@@ -2,7 +2,7 @@
   <div class="page config-page">
     <div class="page-heading">
       <div><div class="eyebrow">资源管理</div><h1>文件管理</h1><p>配置远程主机和需要获取的文件路径。</p></div>
-      <el-button type="primary" :icon="Plus" @click="openCreate">新增配置</el-button>
+      <el-button v-if="hasPermission('file_configs.create')" type="primary" :icon="Plus" @click="openCreate">新增配置</el-button>
     </div>
     <div class="module-toolbar">
       <el-input v-model="search" :prefix-icon="Search" placeholder="搜索项目、主机或 IP" clearable @input="loadConfigs" />
@@ -18,9 +18,9 @@
         <span class="path-cell" :title="item.file_path">{{ item.file_path }}</span>
         <div class="file-config-status"><el-tag size="small" effect="plain" :type="item.fetch_status === 'success' ? 'primary' : item.fetch_status === 'error' ? 'danger' : 'info'" :title="fetchHint(item)">{{ fileCountText(item) }}</el-tag></div>
         <div class="file-config-actions">
-          <el-tooltip content="编辑配置" placement="top"><el-button text :icon="EditPen" aria-label="编辑配置" :disabled="!!pendingActions[item.id] || saving" @click="openEdit(item)" /></el-tooltip>
-          <el-tooltip content="获取文件列表" placement="top"><el-button text :icon="Refresh" aria-label="获取文件列表" :loading="!!pendingActions[item.id]" :disabled="!!pendingActions[item.id] || saving" @click="refreshFiles(item)" /></el-tooltip>
-          <el-tooltip content="删除配置" placement="top"><el-button text type="danger" :icon="Delete" aria-label="删除配置" :disabled="!!pendingActions[item.id] || saving" @click="deleteConfig(item)" /></el-tooltip>
+          <el-tooltip v-if="hasPermission('file_configs.edit')" content="编辑配置" placement="top"><el-button text :icon="EditPen" aria-label="编辑配置" :disabled="!!pendingActions[item.id] || saving" @click="openEdit(item)" /></el-tooltip>
+          <el-tooltip v-if="hasPermission('file_configs.execute')" content="获取文件列表" placement="top"><el-button text :icon="Refresh" aria-label="获取文件列表" :loading="!!pendingActions[item.id]" :disabled="!!pendingActions[item.id] || saving" @click="refreshFiles(item)" /></el-tooltip>
+          <el-tooltip v-if="hasPermission('file_configs.delete')" content="删除配置" placement="top"><el-button text type="danger" :icon="Delete" aria-label="删除配置" :disabled="!!pendingActions[item.id] || saving" @click="deleteConfig(item)" /></el-tooltip>
         </div>
       </div>
       <el-empty v-if="!configs.length" description="暂无文件管理配置" />
@@ -36,10 +36,10 @@
           <el-col :span="24"><el-form-item label="关联账号"><el-input :model-value="selectedHost?.account_name || ''" readonly /></el-form-item></el-col>
         </template>
         <template v-else>
-        <el-col :span="12"><el-form-item label="主机名称" prop="host_name"><el-input v-model="form.host_name" /></el-form-item></el-col>
-        <el-col :span="12"><el-form-item label="IP 地址" prop="ip_address"><el-input v-model="form.ip_address" /></el-form-item></el-col>
-        <el-col :span="12"><el-form-item label="SSH 端口"><el-input-number v-model="form.port" :min="1" :max="65535" controls-position="right" style="width:100%" /></el-form-item></el-col>
-        <el-col :span="12"><el-form-item label="关联账号" prop="account_id"><el-select v-model="form.account_id" style="width:100%" placeholder="选择账号"><el-option v-for="account in accounts" :key="account.id" :label="account.name" :value="account.id" /></el-select></el-form-item></el-col>
+        <el-col :span="12"><el-form-item label="主机名称"><el-input v-model="form.host_name" readonly /></el-form-item></el-col>
+        <el-col :span="12"><el-form-item label="IP 地址"><el-input v-model="form.ip_address" readonly /></el-form-item></el-col>
+        <el-col :span="12"><el-form-item label="SSH 端口"><el-input-number v-model="form.port" disabled controls-position="right" style="width:100%" /></el-form-item></el-col>
+        <el-col :span="12"><el-form-item label="关联账号"><el-input :model-value="editing.account_name" readonly /></el-form-item></el-col>
         </template>
       </el-row>
       <p class="muted-cell">{{ editing ? '账号保存后仅对当前配置生效。' : '机器信息来自项目管理，使用所选机器已保存的登录账号。' }}</p>
@@ -55,6 +55,7 @@ import { computed, nextTick, onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
 import { Delete, EditPen, FolderOpened, Plus, Refresh, Search } from '@element-plus/icons-vue'
 import { api } from '../api'
+import { hasPermission } from '../composables/useAuth'
 import { projectTree, type Project } from '../features/projects/model'
 import { fileManagementConfigs, hostsForProject, machineLabel } from '../features/files/hostSelection'
 type Config = { id: number; revision: number; updated_at: string; project: string; project_id: number; project_path: string; host_name: string; ip_address: string; machine_name: string; port: number; file_path: string; account_id: number; account_name: string; connection_status: string; connection_error: string; last_verified_at: string | null; fetch_status: string; fetch_error: string; file_count: number; last_fetched_at: string | null }
@@ -79,7 +80,7 @@ async function loadConfigs() {
     }))
   } catch (error: any) { if (version === loadVersion) ElMessage.error(error.response?.data?.detail || '加载文件配置失败') }
 }
-async function loadAccounts() { const [a, p] = await Promise.all([api.get<Account[]>('/accounts/'), api.get<Project[]>('/projects/')]); accounts.value = a.data; projects.value = p.data }
+async function loadAccounts() { const [a, p] = await Promise.all([hasPermission('file_configs.edit') ? api.get<Account[]>('/accounts/options/') : Promise.resolve({ data: [] as Account[] }), api.get<Project[]>('/projects/')]); accounts.value = a.data; projects.value = p.data }
 let choicesVersion = 0
 function projectChanged() { form.source_config_id = undefined; formRef.value?.clearValidate('source_config_id') }
 async function openCreate() {
@@ -107,7 +108,7 @@ async function openEdit(item: Config) {
 async function save() {
   if (saving.value || choicesLoading.value || (!editing.value && choicesError.value)) return
   const target = editing.value ? { ...editing.value } : null
-  const payload = { ...form, ...(target ? { revision: target.revision } : {}) }
+  const payload = target ? { file_path: form.file_path, revision: target.revision } : { ...form }
   saving.value = true
   try {
     if (!await formRef.value?.validate().catch(() => false)) return

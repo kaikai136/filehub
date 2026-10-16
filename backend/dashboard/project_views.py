@@ -14,11 +14,13 @@ from .projects import project_payload, save_project
 from .inspection import inspect_machine
 from .ssh import connect
 from .views import serialize_file_config, _store_remote_result, _stale_action_response
+from .rbac import require_method_permissions, require_permission
 
 
 @api_view(['GET', 'POST'])
 @authentication_classes([TokenAuthentication])
 @permission_classes([IsAuthenticated])
+@require_method_permissions({'GET': ('projects.view', 'file_configs.view', 'file_lists.view'), 'POST': 'projects.create'})
 def projects(request):
     if request.method == 'GET':
         return Response([project_payload(p) for p in Project.objects.select_related('parent')])
@@ -31,6 +33,7 @@ def projects(request):
 @api_view(['PATCH', 'DELETE'])
 @authentication_classes([TokenAuthentication])
 @permission_classes([IsAuthenticated])
+@require_method_permissions({'PATCH': 'projects.edit', 'DELETE': 'projects.delete'})
 def project_detail(request, project_id):
     node = get_object_or_404(Project, pk=project_id)
     if request.method == 'DELETE':
@@ -48,6 +51,7 @@ def project_detail(request, project_id):
 @api_view(['POST'])
 @authentication_classes([TokenAuthentication])
 @permission_classes([IsAuthenticated])
+@require_permission('projects.execute')
 def inspect_config(request, config_id):
     config = get_object_or_404(FileConfig, pk=config_id)
     if not FileConfig.objects.filter(pk=config.pk, revision=config.revision).update(revision=F('revision') + 1):
@@ -87,6 +91,10 @@ def inspect_config(request, config_id):
 @permission_classes([IsAuthenticated])
 def batch_configs(request):
     action, items = request.data.get('action'), request.data.get('items')
+    from .permissions import has_permission
+    required = 'projects.delete' if action == 'delete' else 'projects.edit'
+    if not has_permission(request.user, required):
+        return Response({'detail': '没有执行此操作的权限'}, status=403)
     if action not in ('move', 'delete') or not isinstance(items, list) or not items:
         raise ValidationError('请选择操作和主机')
     if action == 'move':

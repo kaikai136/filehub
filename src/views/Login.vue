@@ -22,6 +22,8 @@ import { useRouter } from 'vue-router'
 import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
 import { Grid, Lock, User as UserIcon } from '@element-plus/icons-vue'
 import { login } from '../api'
+import { authUser } from '../composables/useAuth'
+import { landingPage } from '../features/access/model'
 
 const router = useRouter()
 const formRef = ref<FormInstance>()
@@ -36,9 +38,10 @@ async function submit() {
   await formRef.value?.validate()
   loading.value = true
   try {
-    await login(form.username, form.password)
+    const { user } = await login(form.username, form.password)
+    authUser.value = user
     ElMessage.success('登录成功')
-    router.push('/')
+    router.push(landingPage(user))
   } catch (error: any) {
     ElMessage.error(error.response?.data?.detail || '登录失败，请检查账号密码')
   } finally {

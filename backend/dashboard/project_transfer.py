@@ -12,6 +12,7 @@ from rest_framework.response import Response
 
 from .models import Account, FileConfig, Project
 from .projects import validate_config
+from .rbac import require_permission
 
 IMPORT_COLUMNS = [('项目完整路径', 'project_path'), ('节点名称', 'host_name'), ('IP地址', 'ip_address'),
                   ('端口', 'port'), ('账号名称', 'account_name')]
@@ -98,6 +99,7 @@ def validate_rows(rows):
 @api_view(['GET'])
 @authentication_classes([TokenAuthentication])
 @permission_classes([IsAuthenticated])
+@require_permission('projects.import')
 def import_template(request):
     return workbook_response([[label for label, _ in IMPORT_COLUMNS]], 'host-template.xlsx')
 
@@ -105,6 +107,7 @@ def import_template(request):
 @api_view(['POST'])
 @authentication_classes([TokenAuthentication])
 @permission_classes([IsAuthenticated])
+@require_permission('projects.export')
 def export_configs(request):
     ids = request.data.get('ids')
     if not isinstance(ids, list) or any(not isinstance(value, int) for value in ids):
@@ -123,6 +126,7 @@ def export_configs(request):
 @api_view(['POST'])
 @authentication_classes([TokenAuthentication])
 @permission_classes([IsAuthenticated])
+@require_permission('projects.import')
 def import_configs(request):
     if 'token' not in request.data:
         upload = request.FILES.get('file')

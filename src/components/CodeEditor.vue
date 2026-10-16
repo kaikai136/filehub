@@ -25,7 +25,7 @@ import { properties } from '@codemirror/legacy-modes/mode/properties'
 import { standardSQL } from '@codemirror/legacy-modes/mode/sql'
 import { toml } from '@codemirror/legacy-modes/mode/toml'
 
-const props = defineProps<{ modelValue: string; filename: string }>()
+const props = defineProps<{ modelValue: string; filename: string; readonly?: boolean }>()
 const emit = defineEmits<{
   'update:modelValue': [value: string]
   'language-change': [language: string]
@@ -77,6 +77,7 @@ onMounted(() => {
         basicSetup,
         keymap.of([{ key: 'Mod-s', preventDefault: true, run: () => { emit('save'); return true } }, ...defaultKeymap, indentWithTab]),
         EditorState.tabSize.of(2),
+        EditorState.readOnly.of(Boolean(props.readonly)),
         indentUnit.of('  '),
         EditorView.lineWrapping,
         languageCompartment.of(language.extension),

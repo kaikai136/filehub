@@ -1,9 +1,11 @@
 from django.urls import path
 from . import project_views, project_transfer
+from . import rbac_views
 from .views import (
     dashboard,
     accounts,
     account_detail,
+    account_options,
     file_configs,
     file_config_detail,
     file_config_refresh,
@@ -19,6 +21,10 @@ from .views import (
 )
 
 urlpatterns = [
+    path('permissions/', rbac_views.permission_catalog),
+    path('roles/', rbac_views.roles),
+    path('roles/<int:role_id>/', rbac_views.role_detail),
+    path('roles/<int:role_id>/users/', rbac_views.role_users),
     path('projects/', project_views.projects),
     path('projects/<int:project_id>/', project_views.project_detail),
     path('file-configs/<int:config_id>/inspect/', project_views.inspect_config),
@@ -34,6 +40,7 @@ urlpatterns = [
     path("users/<int:user_id>/", user_detail, name="user-detail"),
     path("dashboard/", dashboard, name="dashboard"),
     path("accounts/", accounts, name="accounts"),
+    path("accounts/options/", account_options, name="account-options"),
     path("accounts/<int:account_id>/", account_detail, name="account-detail"),
     path("file-configs/", file_configs, name="file-configs"),
     path("file-configs/<int:config_id>/", file_config_detail, name="file-config-detail"),

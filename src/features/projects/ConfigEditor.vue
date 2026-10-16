@@ -33,7 +33,7 @@ watch(() => props.modelValue, async value => {
   const c = props.config
   Object.assign(form, c ? { project_id: c.project_id, host_name: c.host_name, ip_address: c.ip_address, port: c.port, account_id: c.account_id } : { project_id: props.projectId ?? undefined, host_name: '', ip_address: '', port: 22, account_id: undefined })
   await nextTick(); formRef.value?.clearValidate()
-  try { const [p, a] = await Promise.all([api.get('/projects/'), api.get('/accounts/')]); projects.value = p.data; accounts.value = a.data }
+  try { const [p, a] = await Promise.all([api.get('/projects/'), api.get('/accounts/options/')]); projects.value = p.data; accounts.value = a.data }
   catch (e) { error.value = errorText(e) }
 })
 function close(done?: () => void) { if (!saving.value) { emit('update:modelValue', false); done?.() } }

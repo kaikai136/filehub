@@ -29,7 +29,7 @@
             <el-table-column label="文件大小" min-width="110" sortable prop="size"><template #default="{ row }">{{ formatSize(row.size) }}</template></el-table-column>
             <el-table-column label="修改时间" min-width="180" sortable prop="modified_at"><template #default="{ row }">{{ formatDate(row.modified_at) }}</template></el-table-column>
             <el-table-column label="获取状态" min-width="100"><template #default><el-tag size="small" effect="plain" type="success">已获取</el-tag></template></el-table-column>
-            <el-table-column label="操作" width="132" fixed="right"><template #default="{ row }"><el-button text type="primary" :icon="EditPen" @click="openEditor(row)">编辑</el-button><el-button text @click="showDetail(row)">详情</el-button></template></el-table-column>
+            <el-table-column label="操作" width="100" fixed="right"><template #default="{ row }"><div class="admin-actions"><el-tooltip content="打开文件"><el-button text :icon="hasPermission('file_lists.edit') ? EditPen : View" :aria-label="hasPermission('file_lists.edit') ? '编辑文件' : '查看文件'" @click="openEditor(row)" /></el-tooltip><el-tooltip content="文件详情"><el-button text :icon="InfoFilled" aria-label="文件详情" @click="showDetail(row)" /></el-tooltip></div></template></el-table-column>
           </el-table>
         </div>
         <div class="folder-content-footer"><span>包含隐藏文件及隐藏目录内的文件，目录本身不计数</span><span v-if="activeConfig?.last_fetched_at">上次获取：{{ formatDate(activeConfig.last_fetched_at) }}</span></div>
@@ -53,12 +53,12 @@
         </div>
       </template>
       <div v-loading="editorLoading" class="file-editor-body">
-        <CodeEditor v-if="selected && !editorLoading" v-model="editorContent" :filename="selected.name" @language-change="editorLanguage = $event" @save="saveFile" />
+        <CodeEditor v-if="selected && !editorLoading" v-model="editorContent" :filename="selected.name" :readonly="!hasPermission('file_lists.edit')" @language-change="editorLanguage = $event" @save="saveFile" />
       </div>
       <template #footer>
-        <span class="editor-shortcut">Ctrl / Cmd + S 保存</span>
+        <span class="editor-shortcut">{{ hasPermission('file_lists.edit') ? 'Ctrl / Cmd + S 保存' : '只读' }}</span>
         <el-button :disabled="saving" @click="cancelEditor">取消</el-button>
-        <el-button type="primary" :loading="saving" :disabled="editorLoading || !editorDirty" @click="saveFile">保存</el-button>
+        <el-button v-if="hasPermission('file_lists.edit')" type="primary" :loading="saving" :disabled="editorLoading || !editorDirty" @click="saveFile">保存</el-button>
       </template>
     </el-dialog>
   </div>
@@ -67,8 +67,9 @@
 <script setup lang="ts">
 import { computed, defineAsyncComponent, nextTick, onMounted, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox, type ElTree } from 'element-plus'
-import { Document, EditPen, FolderOpened, Monitor, Refresh, Search } from '@element-plus/icons-vue'
+import { Document, EditPen, FolderOpened, InfoFilled, Monitor, Refresh, Search, View } from '@element-plus/icons-vue'
 import { api } from '../api'
+import { hasPermission } from '../composables/useAuth'
 import { projectTree, type Project } from '../features/projects/model'
 
 const CodeEditor = defineAsyncComponent(() => import('../components/CodeEditor.vue'))
@@ -236,7 +237,7 @@ async function openEditor(item: RemoteFile) {
   } finally { editorLoading.value = false }
 }
 async function saveFile() {
-  if (!selected.value || editorLoading.value || saving.value || !editorDirty.value) return
+  if (!hasPermission('file_lists.edit') || !selected.value || editorLoading.value || saving.value || !editorDirty.value) return
   saving.value = true
   try {
     const response = await api.patch<{ detail: string; file: RemoteFile }>(`/file-lists/${selected.value.id}/`, { content: editorContent.value }, { timeout: 30000 })

@@ -12,6 +12,11 @@ import Accounts from './views/Accounts.vue'
 import FileConfigs from './views/FileConfigs.vue'
 import FileLists from './views/FileLists.vue'
 import Projects from './views/Projects.vue'
+import RoleManagement from './views/RoleManagement.vue'
+import Forbidden from './views/Forbidden.vue'
+import { clearAuth } from './api'
+import { authUser, refreshAuth } from './composables/useAuth'
+import { canVisit, landingPage } from './features/access/model'
 import './style.css'
 
 const router = createRouter({
@@ -20,6 +25,8 @@ const router = createRouter({
     { path: '/login', component: Login },
     { path: '/', component: Dashboard, meta: { title: '概览' } },
     { path: '/users', component: UserManagement, meta: { title: '用户管理' } },
+    { path: '/roles', component: RoleManagement, meta: { title: '角色管理' } },
+    { path: '/forbidden', component: Forbidden, meta: { title: '无访问权限' } },
     { path: '/accounts', component: Accounts, meta: { title: '账号管理' } },
     { path: '/file-configs', component: FileConfigs, meta: { title: '文件管理' } },
     { path: '/file-lists', component: FileLists, meta: { title: '文件列表' } },
@@ -28,10 +35,14 @@ const router = createRouter({
   ],
 })
 
-router.beforeEach((to) => {
+router.beforeEach(async (to) => {
   const token = localStorage.getItem('confighub_token')
   if (to.path !== '/login' && !token) return '/login'
-  if (to.path === '/login' && token) return '/'
+  if (!token) return true
+  try { await refreshAuth() } catch { authUser.value = null; clearAuth(); return to.path === '/login' ? true : '/login' }
+  if (to.path === '/login') return landingPage(authUser.value)
+  if (to.path === '/' && !canVisit(authUser.value, '/')) return landingPage(authUser.value)
+  if (!canVisit(authUser.value, to.path)) return '/forbidden'
 })
 
 const app = createApp(App)

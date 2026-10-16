@@ -1,12 +1,14 @@
 from django.contrib.auth import get_user_model
 from rest_framework.test import APITestCase
 
-from .models import Account, FileConfig, Project, RemoteFile
+from .models import Account, FileConfig, Project, RemoteFile, Role
 
 
 class FileHostSelectionTests(APITestCase):
     def setUp(self):
-        self.client.force_authenticate(get_user_model().objects.create_user(username='file-selector'))
+        user = get_user_model().objects.create_user(username='file-selector')
+        user.roles.add(Role.objects.get(code='administrator'))
+        self.client.force_authenticate(user)
         self.account = Account.objects.create(name='original', username='original-user')
         self.host = FileConfig.objects.create(
             project='selected', host_name='node', machine_name='remote-host',

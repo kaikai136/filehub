@@ -1,6 +1,24 @@
 from types import SimpleNamespace
 
+from django.conf import settings
 from django.db import models
+
+
+class Role(models.Model):
+    name = models.CharField(max_length=100, unique=True, verbose_name="角色名称")
+    code = models.CharField(max_length=100, unique=True, verbose_name="角色标识")
+    is_active = models.BooleanField(default=True, verbose_name="启用状态")
+    permissions = models.JSONField(default=list, verbose_name="权限标识")
+    is_builtin = models.BooleanField(default=False, editable=False, verbose_name="内置角色")
+    users = models.ManyToManyField(settings.AUTH_USER_MODEL, related_name="roles", blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return self.name
 
 
 class Account(models.Model):

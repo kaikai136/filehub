@@ -29,6 +29,10 @@ npm run dev
 - `GET /api/auth/me/`：获取当前用户
 - `GET/POST /api/users/`：管理员查询、新增用户
 - `PATCH/DELETE /api/users/:id/`：管理员编辑、启用/禁用、删除用户
+- `GET /api/permissions/`：超级管理员查询固定权限目录
+- `GET/POST /api/roles/`：超级管理员查询、新增角色
+- `PATCH/DELETE /api/roles/:id/`：超级管理员编辑、启用/禁用、删除角色
+- `GET /api/roles/:id/users/`：超级管理员查询角色成员
 - `GET/POST /api/accounts/`：账号列表、新增账号
 - `PATCH/DELETE /api/accounts/:id/`：编辑、删除账号
 - `GET/POST /api/file-configs/`：文件管理配置列表、新增配置（支持 `project_id`）
@@ -46,5 +50,7 @@ npm run dev
 
 除 `POST /api/auth/login/` 外，其余 API 接口均需要在请求头携带
 `Authorization: Token <token>`。
+
+业务接口同时校验角色权限。多个启用角色的权限取并集，停用角色不提供权限；超级管理员始终拥有全部权限。用户和角色管理仅允许超级管理员访问。
 
 默认开发管理员：`admin / admin123`。生产环境请登录后立即修改密码。

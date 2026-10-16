@@ -3,11 +3,11 @@
     <div class="page-heading"><div><div class="eyebrow">资源管理</div><h1>项目管理</h1><p>按项目管理主机配置，验证连接并查看机器规格。</p></div><el-button :icon="Refresh" :loading="loading" @click="load">刷新列表</el-button></div>
     <div class="project-browser">
       <aside class="project-panel">
-        <div class="project-panel-heading"><strong>项目列表</strong><el-button circle type="primary" :icon="Plus" title="新增项目" aria-label="新增项目" @click="editProject(null)" /></div>
+        <div class="project-panel-heading"><strong>项目列表</strong><el-button v-if="hasPermission('projects.create')" circle type="primary" :icon="Plus" title="新增项目" aria-label="新增项目" @click="editProject(null)" /></div>
         <el-input v-model="projectSearch" :prefix-icon="Search" placeholder="搜索项目" clearable />
         <button class="all-projects" :class="{ active: selectedProject === null }" @click="selectProject(null)">全部项目 <span>{{ configs.length }}</span></button>
         <el-tree ref="treeRef" :data="tree" node-key="id" highlight-current default-expand-all :expand-on-click-node="false" :filter-node-method="filterProject" @node-click="(node: ProjectNode) => selectProject(node.id)">
-          <template #default="{ data }"><span class="project-tree-label" :title="data.path"><el-icon><FolderOpened /></el-icon><span>{{ data.name }}</span><small>{{ data.count }}</small><el-dropdown trigger="click" @command="(command: string) => projectAction(command, data)"><el-button text :icon="MoreFilled" aria-label="项目操作" @click.stop /><template #dropdown><el-dropdown-menu><el-dropdown-item command="child">新增子项目</el-dropdown-item><el-dropdown-item command="edit">重命名 / 移动 / 排序</el-dropdown-item><el-dropdown-item command="delete" divided>删除空项目</el-dropdown-item></el-dropdown-menu></template></el-dropdown></span></template>
+          <template #default="{ data }"><span class="project-tree-label" :title="data.path"><el-icon><FolderOpened /></el-icon><span>{{ data.name }}</span><small>{{ data.count }}</small><el-dropdown v-if="hasPermission('projects.create') || hasPermission('projects.edit') || hasPermission('projects.delete')" trigger="click" @command="(command: string) => projectAction(command, data)"><el-button text :icon="MoreFilled" aria-label="项目操作" @click.stop /><template #dropdown><el-dropdown-menu><el-dropdown-item v-if="hasPermission('projects.create')" command="child">新增子项目</el-dropdown-item><el-dropdown-item v-if="hasPermission('projects.edit')" command="edit">重命名 / 移动 / 排序</el-dropdown-item><el-dropdown-item v-if="hasPermission('projects.delete')" command="delete" divided>删除空项目</el-dropdown-item></el-dropdown-menu></template></el-dropdown></span></template>
         </el-tree>
       </aside>
       <section class="project-content">
@@ -16,10 +16,10 @@
           <el-input v-model="search" :prefix-icon="Search" clearable placeholder="节点名称 / 机器名称 / IP" aria-label="搜索主机" />
           <el-select v-model="status" clearable placeholder="全部状态" aria-label="筛选状态"><el-option label="已验证" value="success" /><el-option label="验证失败" value="error" /><el-option label="未验证" value="pending" /></el-select>
           <div class="project-toolbar-actions">
-            <el-button type="primary" :icon="Plus" :disabled="busy" @click="openEditor(null)">新建</el-button>
-            <el-dropdown :disabled="busy" @command="batchAction"><el-button :disabled="busy">更多操作<el-icon><ArrowDown /></el-icon></el-button><template #dropdown><el-dropdown-menu><el-dropdown-item command="inspect" :disabled="!selected.length">验证并采集所选</el-dropdown-item><el-dropdown-item command="move" :disabled="!selected.length">移动所选项目</el-dropdown-item><el-dropdown-item command="delete" :disabled="!selected.length" divided>删除所选</el-dropdown-item></el-dropdown-menu></template></el-dropdown>
-            <el-button :icon="Upload" title="导入 Excel" aria-label="导入 Excel" :disabled="busy" @click="importDialog?.open()" />
-            <el-dropdown @command="exportRows"><el-button :icon="Download" title="导出 Excel" aria-label="导出 Excel" /><template #dropdown><el-dropdown-menu><el-dropdown-item command="filtered">导出当前筛选范围</el-dropdown-item><el-dropdown-item command="selected" :disabled="!selected.length">导出勾选记录</el-dropdown-item></el-dropdown-menu></template></el-dropdown>
+            <el-button v-if="hasPermission('projects.create')" type="primary" :icon="Plus" :disabled="busy" @click="openEditor(null)">新建</el-button>
+            <el-dropdown v-if="hasPermission('projects.execute') || hasPermission('projects.edit') || hasPermission('projects.delete')" :disabled="busy" @command="batchAction"><el-button :disabled="busy">更多操作<el-icon><ArrowDown /></el-icon></el-button><template #dropdown><el-dropdown-menu><el-dropdown-item v-if="hasPermission('projects.execute')" command="inspect" :disabled="!selected.length">验证并采集所选</el-dropdown-item><el-dropdown-item v-if="hasPermission('projects.edit')" command="move" :disabled="!selected.length">移动所选项目</el-dropdown-item><el-dropdown-item v-if="hasPermission('projects.delete')" command="delete" :disabled="!selected.length" divided>删除所选</el-dropdown-item></el-dropdown-menu></template></el-dropdown>
+            <el-button v-if="hasPermission('projects.import')" :icon="Upload" title="导入 Excel" aria-label="导入 Excel" :disabled="busy" @click="importDialog?.open()" />
+            <el-dropdown v-if="hasPermission('projects.export')" @command="exportRows"><el-button :icon="Download" title="导出 Excel" aria-label="导出 Excel" /><template #dropdown><el-dropdown-menu><el-dropdown-item command="filtered">导出当前筛选范围</el-dropdown-item><el-dropdown-item command="selected" :disabled="!selected.length">导出勾选记录</el-dropdown-item></el-dropdown-menu></template></el-dropdown>
             <el-button :icon="Refresh" title="刷新" aria-label="刷新" :loading="loading" @click="load" />
             <el-popover placement="bottom-end" :width="200" trigger="click"><template #reference><el-button :icon="Setting" title="列设置" aria-label="列设置" /></template><div class="project-column-options"><el-checkbox v-for="column in columns" :key="column.key" :model-value="visibleColumns.includes(column.key)" :disabled="visibleColumns.length === 1 && visibleColumns.includes(column.key)" @change="toggleColumn(column.key)">{{ column.label }}</el-checkbox><el-button text @click="visibleColumns = columns.map(c => c.key)">恢复默认</el-button></div></el-popover>
             <el-button :icon="FullScreen" :title="fullscreen ? '退出全屏' : '全屏'" aria-label="切换全屏" @click="fullscreen = !fullscreen" />
@@ -29,14 +29,14 @@
         <div v-if="progress.total" class="project-progress"><span>处理进度：{{ progress.done }} / {{ progress.total }}</span><el-progress :percentage="Math.round(progress.done / progress.total * 100)" /></div>
         <div class="project-table-scroll">
           <el-table ref="tableRef" :data="paged" row-key="id" border v-loading="loading" empty-text="当前项目暂无匹配的主机配置" @selection-change="selectionChanged" @sort-change="sortChanged">
-            <el-table-column type="selection" width="40" reserve-selection :selectable="() => !busy" />
+            <el-table-column v-if="hasPermission('projects.execute') || hasPermission('projects.edit') || hasPermission('projects.delete') || hasPermission('projects.export')" type="selection" width="40" reserve-selection :selectable="() => !busy" />
             <el-table-column v-for="column in shownColumns" :key="column.key" :prop="column.key" :label="column.label" :min-width="column.width" :fixed="column.key === 'actions' ? 'right' : undefined" :sortable="column.key === 'actions' || column.key === 'specifications' ? false : 'custom'">
               <template #default="{ row }">
                 <div v-if="column.key === 'specifications'" class="project-spec"><span>规格：{{ row.specifications.cpu ? `${row.specifications.cpu}C` : '—' }} / {{ formatBytes(row.specifications.memory_bytes) }} / {{ formatBytes(row.specifications.disk_bytes) }}</span><span :title="`${row.specifications.system || ''} ${row.specifications.arch || ''}`">系统：{{ row.specifications.system || '—' }} · {{ row.specifications.arch || '—' }}</span><el-tooltip v-if="row.inspection_error" :content="row.inspection_error"><small class="project-warning">规格采集失败</small></el-tooltip></div>
                 <el-tag v-else-if="column.key === 'platform_type' && row.platform_type" :type="row.platform_type === 'windows' ? 'primary' : 'success'" size="small">{{ row.platform_type }}</el-tag>
                 <span v-else-if="column.key === 'updated_at'">{{ new Date(row.updated_at).toLocaleString('zh-CN') }}</span>
                 <el-tooltip v-else-if="column.key === 'connection_status'" :content="row.connection_error || connectionText(row.connection_status)"><el-tag effect="plain" :type="row.connection_status === 'success' ? 'success' : row.connection_status === 'error' ? 'danger' : 'info'">{{ pending.has(row.id) ? '验证中…' : connectionText(row.connection_status) }}</el-tag></el-tooltip>
-                <div v-else-if="column.key === 'actions'" class="project-row-actions"><el-button text :icon="EditPen" title="编辑" aria-label="编辑主机" :disabled="busy" @click="openEditor(row)" /><el-button text :icon="Refresh" title="验证并采集规格" aria-label="验证并采集规格" :loading="pending.has(row.id)" :disabled="busy" @click="inspectRows([row])" /><el-button text type="danger" :icon="Delete" title="删除" aria-label="删除主机" :disabled="busy" @click="deleteRows([row])" /></div>
+                <div v-else-if="column.key === 'actions'" class="project-row-actions"><el-button v-if="hasPermission('projects.edit')" text :icon="EditPen" title="编辑" aria-label="编辑主机" :disabled="busy" @click="openEditor(row)" /><el-button v-if="hasPermission('projects.execute')" text :icon="Refresh" title="验证并采集规格" aria-label="验证并采集规格" :loading="pending.has(row.id)" :disabled="busy" @click="inspectRows([row])" /><el-button v-if="hasPermission('projects.delete')" text type="danger" :icon="Delete" title="删除" aria-label="删除主机" :disabled="busy" @click="deleteRows([row])" /></div>
                 <span v-else :title="String(row[column.key] || '')">{{ row[column.key] || '—' }}</span>
               </template>
             </el-table-column>
@@ -45,8 +45,8 @@
         <footer class="project-content-footer"><span>已选 {{ selected.length }} 条 · 每条主机配置独立展示</span><el-pagination v-model:current-page="page" v-model:page-size="pageSize" :page-sizes="[10, 20, 50, 100]" :total="filtered.length" layout="total, sizes, prev, pager, next" /></footer>
       </section>
     </div>
-    <ConfigEditor v-model="editorVisible" :config="editing" :project-id="selectedProject" @saved="load" />
-    <ImportDialog ref="importDialog" @imported="load" />
+    <ConfigEditor v-if="hasPermission('projects.create') || hasPermission('projects.edit')" v-model="editorVisible" :config="editing" :project-id="selectedProject" @saved="load" />
+    <ImportDialog v-if="hasPermission('projects.import')" ref="importDialog" @imported="load" />
     <el-dialog v-model="projectDialog" :title="projectForm.id ? '编辑项目' : '新增项目'" width="460px" :close-on-click-modal="false" :before-close="(done: () => void) => { if (!projectSaving) done() }">
       <el-form label-position="top" :disabled="projectSaving"><el-form-item label="项目名称"><el-input v-model="projectForm.name" maxlength="150" /></el-form-item><el-form-item label="父项目（留空为顶层）"><el-tree-select v-model="projectForm.parent_id" :data="parentTree" node-key="id" clearable check-strictly filterable /></el-form-item><el-form-item label="排序值（小值在前）"><el-input-number v-model="projectForm.sort_order" :min="0" /></el-form-item><el-alert v-if="projectError" :title="projectError" type="error" :closable="false" /></el-form>
       <template #footer><el-button :disabled="projectSaving" @click="projectDialog = false">取消</el-button><el-button type="primary" :loading="projectSaving" @click="saveProject">保存</el-button></template>
@@ -60,6 +60,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } 
 import { ElMessage, ElMessageBox, type ElTree } from 'element-plus'
 import { ArrowDown, Delete, Download, EditPen, FolderOpened, FullScreen, MoreFilled, Plus, Refresh, Search, Setting, Upload } from '@element-plus/icons-vue'
 import { api } from '../api'
+import { hasPermission } from '../composables/useAuth'
 import ConfigEditor from '../features/projects/ConfigEditor.vue'
 import ImportDialog from '../features/projects/ImportDialog.vue'
 import { columns, connectionText, descendantIds, errorText, filterHosts, formatBytes, pageHosts, projectTree, runLimited, sortHosts, type Config, type Project, type ProjectNode } from '../features/projects/model'
