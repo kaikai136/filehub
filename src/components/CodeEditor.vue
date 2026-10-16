@@ -84,7 +84,7 @@ onMounted(() => {
           if (update.docChanged) emit('update:modelValue', update.state.doc.toString())
         }),
         EditorView.theme({
-          '&': { height: 'min(64vh, 720px)', minHeight: '420px', fontSize: '14px', backgroundColor: '#ffffff' },
+          '&': { height: 'min(64vh, 720px)', minHeight: '420px', fontSize: '13px', backgroundColor: '#ffffff' },
           '.cm-scroller': { overflow: 'auto', fontFamily: 'Consolas, "Cascadia Code", "SFMono-Regular", monospace', lineHeight: '1.6' },
           '.cm-gutters': { backgroundColor: '#f7f9fc', color: '#8b98aa', borderRight: '1px solid #e5eaf2' },
           '.cm-activeLine, .cm-activeLineGutter': { backgroundColor: '#eef5ff' },

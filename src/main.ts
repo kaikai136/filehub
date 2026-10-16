@@ -11,6 +11,7 @@ import UserManagement from './views/UserManagement.vue'
 import Accounts from './views/Accounts.vue'
 import FileConfigs from './views/FileConfigs.vue'
 import FileLists from './views/FileLists.vue'
+import Projects from './views/Projects.vue'
 import './style.css'
 
 const router = createRouter({
@@ -22,6 +23,7 @@ const router = createRouter({
     { path: '/accounts', component: Accounts, meta: { title: '账号管理' } },
     { path: '/file-configs', component: FileConfigs, meta: { title: '文件管理' } },
     { path: '/file-lists', component: FileLists, meta: { title: '文件列表' } },
+    { path: '/projects', component: Projects, meta: { title: '项目管理' } },
     { path: '/:pathMatch(.*)*', component: ModulePage },
   ],
 })

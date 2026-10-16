@@ -16,6 +16,7 @@ from rest_framework import status
 from .models import Account, FileConfig, RemoteFile
 from .security import decrypt_value, encrypt_value
 from .ssh import connect, list_remote_files, read_remote_file, test_connection, write_remote_file
+from .projects import resolve_project, validate_config
 
 
 UserModel = get_user_model()
@@ -53,6 +54,13 @@ def serialize_file_config(config):
     return {
         "id": config.id,
         "project": config.project,
+        "project_id": config.project_node_id,
+        "project_path": config.project_node.path if config.project_node_id else config.project,
+        "specifications": config.specifications,
+        "platform_type": config.platform_type,
+        "inspection_status": config.inspection_status,
+        "inspection_error": config.inspection_error,
+        "last_inspected_at": config.last_inspected_at.isoformat() if config.last_inspected_at else None,
         "host_name": config.host_name,
         "ip_address": config.ip_address,
         "machine_name": config.machine_name,
@@ -260,24 +268,50 @@ def _get_account(account_id):
 def file_configs(request):
     if request.method == "GET":
         query = str(request.query_params.get("search", "")).strip()
-        queryset = FileConfig.objects.select_related("account").annotate(file_count=Count("remote_files"))
+        queryset = FileConfig.objects.select_related("account", "project_node").annotate(file_count=Count("remote_files"))
         if query:
             queryset = queryset.filter(project__icontains=query) | queryset.filter(host_name__icontains=query) | queryset.filter(ip_address__icontains=query)
         return Response([serialize_file_config(config) for config in queryset])
 
     data = request.data
-    required = ("project", "host_name", "ip_address", "machine_name", "file_path", "account_id")
+    if 'source_config_id' in data:
+        if type(data['source_config_id']) is not int:
+            return Response({'detail': '请选择有效机器'}, status=400)
+        # Copy the selected host's own credentials, not its potentially edited
+        # account template. Resolve everything again when the form is submitted.
+        with transaction.atomic():
+            source = FileConfig.objects.select_for_update().filter(pk=data['source_config_id']).first()
+            if source is None:
+                return Response({'detail': '所选机器不存在，请重新选择'}, status=400)
+            if data.get('source_revision') != source.revision:
+                return Response({'detail': '所选机器已更新，请重新打开新增窗口'}, status=409)
+            if data.get('project_id') != source.project_node_id:
+                return Response({'detail': '所选机器不属于当前项目'}, status=400)
+            path = data.get('file_path')
+            if not isinstance(path, str) or not path.strip() or len(path.strip()) > 500:
+                return Response({'detail': '请填写有效文件路径（最多 500 字符）'}, status=400)
+            config = FileConfig.objects.create(
+                project_node=source.project_node, project=source.project,
+                host_name=source.host_name, ip_address=source.ip_address,
+                machine_name=source.machine_name, port=source.port,
+                account=source.account, account_snapshot=source.account_snapshot.copy(),
+                file_path=path.strip(),
+            )
+        return Response(serialize_file_config(config), status=status.HTTP_201_CREATED)
+    required = ("host_name", "ip_address", "account_id")
     if any(not data.get(field) for field in required):
-        return Response({"detail": "项目、主机名称、IP 地址、机器名称、文件路径和账号不能为空"}, status=status.HTTP_400_BAD_REQUEST)
+        return Response({"detail": "项目、主机名称、IP 地址和账号不能为空"}, status=status.HTTP_400_BAD_REQUEST)
     try:
+        validate_config(data)
         account = _get_account(data["account_id"])
+        project = resolve_project(data)
         config = FileConfig.objects.create(
-            project=str(data["project"]).strip(),
+            project=project.name, project_node=project,
             host_name=str(data["host_name"]).strip(),
             ip_address=str(data["ip_address"]).strip(),
-            machine_name=str(data["machine_name"]).strip(),
+            machine_name=str(data.get("machine_name", "")).strip(),
             port=int(data.get("port", 22)),
-            file_path=str(data["file_path"]).strip(),
+            file_path=str(data.get("file_path", "")).strip(),
             account=account,
         )
     except (ValueError, TypeError) as error:
@@ -294,7 +328,11 @@ def file_config_detail(request, config_id):
     except FileConfig.DoesNotExist:
         return Response({"detail": "文件管理配置不存在"}, status=status.HTTP_404_NOT_FOUND)
     if request.method == "DELETE":
-        config.delete()
+        with transaction.atomic():
+            current = FileConfig.objects.select_for_update().get(pk=config.pk)
+            if 'revision' in request.data and request.data['revision'] != current.revision:
+                return Response({'detail': '此记录已更新，请刷新后重试'}, status=409)
+            current.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
     data = request.data
     if "revision" in data and data["revision"] != config.revision:
@@ -302,7 +340,11 @@ def file_config_detail(request, config_id):
     old_connection = (config.ip_address, config.port, config.account_id, config.account_snapshot.copy())
     old_path = config.file_path
     old_project = config.project
-    for field in ("project", "host_name", "ip_address", "machine_name", "file_path"):
+    old_project_node_id = config.project_node_id
+    validate_config(data, config)
+    config.project_node = resolve_project(data, config)
+    config.project = config.project_node.name
+    for field in ("host_name", "ip_address", "machine_name", "file_path"):
         if field in data:
             setattr(config, field, str(data[field]).strip())
     if "port" in data:
@@ -317,6 +359,12 @@ def file_config_detail(request, config_id):
         config.connection_status = "pending"
         config.connection_error = ""
         config.last_verified_at = None
+        config.specifications = {}
+        config.machine_name = ""
+        config.platform_type = ''
+        config.inspection_status = 'pending'
+        config.inspection_error = ''
+        config.last_inspected_at = None
     with transaction.atomic():
         # Reject stale editors rather than saving an old copy over another request.
         current = FileConfig.objects.select_for_update().get(pk=config.pk)
@@ -324,11 +372,12 @@ def file_config_detail(request, config_id):
             return Response({"detail": "此记录已更新，请重新打开后编辑"}, status=status.HTTP_409_CONFLICT)
         config.revision += 1
         fields = [
-            "project", "host_name", "ip_address", "machine_name", "port", "file_path",
+            "project", "project_node", "host_name", "ip_address", "machine_name", "port", "file_path",
             "account", "account_snapshot", "revision", "updated_at",
         ]
         if connection_changed:
             fields += ["connection_status", "connection_error", "last_verified_at"]
+            fields += ['specifications', 'platform_type', 'inspection_status', 'inspection_error', 'last_inspected_at']
         if connection_changed or old_path != config.file_path:
             config.fetch_status = "pending"
             config.fetch_error = ""
@@ -339,7 +388,7 @@ def file_config_detail(request, config_id):
             config.directory_paths = []
             fields += ["directory_paths"]
             fields += ["fetch_status", "fetch_error", "last_fetched_at", "status", "last_error"]
-        elif old_project != config.project:
+        elif old_project != config.project or old_project_node_id != config.project_node_id:
             config.remote_files.update(project=config.project)
         config.save(update_fields=fields)
     config.refresh_from_db()
@@ -448,6 +497,8 @@ def file_config_refresh(request, config_id):
         config = FileConfig.objects.select_related("account").get(id=config_id)
     except FileConfig.DoesNotExist:
         return Response({"detail": "文件管理配置不存在"}, status=status.HTTP_404_NOT_FOUND)
+    if not config.file_path.strip():
+        return Response({"detail": "未配置文件路径，无法获取文件列表"}, status=status.HTTP_400_BAD_REQUEST)
     return _run_remote_action(config, refresh=True)
 
 

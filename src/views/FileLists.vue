@@ -37,7 +37,7 @@
     </div>
     <el-dialog v-model="detailVisible" title="文件详情" width="560px">
       <el-descriptions v-if="selected" :column="1" border>
-        <el-descriptions-item label="项目">{{ configById.get(selected.file_config_id)?.project }}</el-descriptions-item>
+        <el-descriptions-item label="项目">{{ configById.get(selected.file_config_id)?.project_path }}</el-descriptions-item>
         <el-descriptions-item label="主机">{{ configById.get(selected.file_config_id)?.host_name }}（{{ configById.get(selected.file_config_id)?.ip_address }}）</el-descriptions-item>
         <el-descriptions-item label="文件名">{{ selected.name }}</el-descriptions-item>
         <el-descriptions-item label="完整路径"><span class="file-detail-path">{{ fullPath(selected) }}</span></el-descriptions-item>
@@ -69,13 +69,14 @@ import { computed, defineAsyncComponent, nextTick, onMounted, ref, watch } from 
 import { ElMessage, ElMessageBox, type ElTree } from 'element-plus'
 import { Document, EditPen, FolderOpened, Monitor, Refresh, Search } from '@element-plus/icons-vue'
 import { api } from '../api'
+import { projectTree, type Project } from '../features/projects/model'
 
 const CodeEditor = defineAsyncComponent(() => import('../components/CodeEditor.vue'))
 
 type RemoteFile = { id: number; file_config_id: number; project: string; name: string; relative_path: string; file_type: string; size: number; modified_at: string | null }
-type Config = { id: number; project: string; host_name: string; ip_address: string; port: number; file_path: string; directory_paths: string[]; fetch_status: string; fetch_error: string; last_fetched_at: string | null }
+type Config = { id: number; project: string; project_id: number; project_path: string; host_name: string; ip_address: string; port: number; file_path: string; directory_paths: string[]; fetch_status: string; fetch_error: string; last_fetched_at: string | null }
 type FolderNode = { key: string; label: string; title: string; kind: 'project' | 'host' | 'folder'; configIds: number[]; path: string; count: number; children: FolderNode[] }
-const files = ref<RemoteFile[]>([]), configs = ref<Config[]>([]), loading = ref(false)
+const files = ref<RemoteFile[]>([]), configs = ref<Config[]>([]), projects = ref<Project[]>([]), loading = ref(false)
 const treeSearch = ref(''), fileSearch = ref(''), recursive = ref(false), activeKey = ref('')
 const expandedKeys = ref<string[]>([]), treeRef = ref<InstanceType<typeof ElTree>>()
 const detailVisible = ref(false), selected = ref<RemoteFile | null>(null)
@@ -93,13 +94,30 @@ const fileGroups = computed(() => {
   return groups
 })
 const treeData = computed(() => {
-  const projects = new Map<string, FolderNode>()
-  for (const config of configs.value) {
-    let project = projects.get(config.project)
-    if (!project) {
-      project = { key: `project:${config.project}`, label: config.project, title: config.project, kind: 'project', configIds: [], path: '', count: 0, children: [] }
-      projects.set(config.project, project)
+  const projectNodes = projectTree(projects.value, configs.value)
+  const projectMap = new Map<number, FolderNode>()
+  const sourceById = new Map<number, ReturnType<typeof projectTree>[number]>()
+  function indexSources(nodes: ReturnType<typeof projectTree>) {
+    for (const node of nodes) { sourceById.set(node.id, node); indexSources(node.children) }
+  }
+  indexSources(projectNodes)
+  function ensureProject(projectId: number): FolderNode {
+    const existing = projectMap.get(projectId)
+    if (existing) return existing
+    const project = configs.value.find(config => config.project_id === projectId)
+    const source = sourceById.get(projectId)
+    const key = `project:${projectId}`
+    const node: FolderNode = { key, label: source?.name || project?.project || '项目', title: source?.path || project?.project_path || '', kind: 'project', configIds: [], path: '', count: 0, children: [] }
+    projectMap.set(projectId, node)
+    for (const child of source?.children || []) {
+      const childNode = ensureProject(child.id)
+      node.children.push(childNode)
     }
+    return node
+  }
+  for (const config of configs.value) {
+    if (!config.file_path.trim()) continue
+    const project = ensureProject(config.project_id)
     const hostKey = `${project.key}:host:${JSON.stringify([config.host_name, config.ip_address, config.port])}`
     let host = project.children.find(node => node.key === hostKey)
     if (!host) {
@@ -130,7 +148,16 @@ const treeData = computed(() => {
     }
     for (const folder of folders.values()) folder.children.sort((a, b) => a.label.localeCompare(b.label, 'zh-CN'))
   }
-  return [...projects.values()]
+  const roots = projectNodes.map(p => ensureProject(p.id))
+  function collect(node: FolderNode) {
+    for (const child of node.children) if (child.kind === 'project') {
+      collect(child)
+      node.configIds.push(...child.configIds)
+      node.count += child.count
+    }
+  }
+  for (const root of roots) collect(root)
+  return roots
 })
 const nodeMap = computed(() => {
   const nodes = new Map<string, FolderNode>()
@@ -143,7 +170,7 @@ const activeConfig = computed(() => activeNode.value?.configIds.length === 1 ? c
 const location = computed(() => {
   const node = activeNode.value, config = activeConfig.value
   if (!node) return '从左侧选择项目、主机或文件夹'
-  if (node.kind === 'folder' && config) return `${config.project} / ${config.host_name} (${config.ip_address}:${config.port}) · ${node.title}`
+  if (node.kind === 'folder' && config) return `${config.project_path} / ${config.host_name} (${config.ip_address}:${config.port}) · ${node.title}`
   return node.kind === 'project' ? `${node.label} · 所有主机的文件` : `${node.title} · 所有配置目录的文件`
 })
 const scopedFiles = computed(() => {
@@ -174,10 +201,15 @@ async function loadFiles() {
   if (loading.value) return
   loading.value = true
   try {
-    const [fileResponse, configResponse] = await Promise.all([api.get<RemoteFile[]>('/file-lists/'), api.get<Config[]>('/file-configs/')])
-    files.value = fileResponse.data; configs.value = configResponse.data
+    const [fileResponse, configResponse, projectResponse] = await Promise.all([api.get<RemoteFile[]>('/file-lists/'), api.get<Config[]>('/file-configs/'), api.get<Project[]>('/projects/')])
+    files.value = fileResponse.data; configs.value = configResponse.data; projects.value = projectResponse.data
     if (!nodeMap.value.has(activeKey.value)) activeKey.value = configs.value[0] ? `config:${configs.value[0].id}:` : ''
-    if (!expandedKeys.value.length) expandedKeys.value = treeData.value.flatMap(project => [project.key, ...project.children.map(host => host.key), ...project.children.flatMap(host => host.children.map(root => root.key))])
+    if (!expandedKeys.value.length) {
+      const keys: string[] = []
+      function expand(nodes: FolderNode[]) { for (const node of nodes) { keys.push(node.key); expand(node.children) } }
+      expand(treeData.value)
+      expandedKeys.value = keys
+    }
     await nextTick()
     treeRef.value?.setCurrentKey(activeKey.value); treeRef.value?.filter(treeSearch.value)
   } catch (error: any) { ElMessage.error(error.response?.data?.detail || '加载文件列表失败') }
@@ -236,29 +268,29 @@ onMounted(loadFiles)
 .folder-panel, .folder-content { min-width: 0; background: #fff; border: 1px solid #e2e8f0; border-radius: 10px; }
 .folder-panel { padding: 18px 12px; }
 .folder-panel-heading { display: flex; justify-content: space-between; align-items: center; padding: 0 4px 16px; }
-.folder-panel-heading strong { font-size: 18px; }
-.folder-panel-heading > span { font-size: 14px; color: #8793a1; }
+.folder-panel-heading strong { font-size: 16px; }
+.folder-panel-heading > span { font-size: 12px; color: #8793a1; }
 .folder-panel > .el-input { margin-bottom: 16px; }
 .folder-tree-scroll { max-height: calc(100vh - 310px); min-height: 420px; overflow: auto; }
-.folder-tree-scroll :deep(.el-tree) { min-width: max-content; background: transparent; font-size: 16px; }
+.folder-tree-scroll :deep(.el-tree) { min-width: max-content; background: transparent; font-size: 14px; }
 .folder-tree-scroll :deep(.el-tree-node__content) { height: 39px; border-radius: 5px; padding-right: 10px; }
 .folder-tree-scroll :deep(.el-tree-node.is-current > .el-tree-node__content) { background: #3478d4; color: white; }
 .folder-tree-scroll :deep(.el-tree-node.is-current > .el-tree-node__content small), .folder-tree-scroll :deep(.el-tree-node.is-current > .el-tree-node__content .el-tree-node__expand-icon) { color: white; }
 .folder-tree-label { display: flex; flex: 1; align-items: center; gap: 7px; padding-right: 4px; }
 .folder-tree-label > .el-icon { flex-shrink: 0; }
 .folder-tree-label > span { max-width: 310px; overflow: hidden; text-overflow: ellipsis; }
-.folder-tree-label small { margin-left: auto; padding-left: 14px; font-size: 13px; color: #94a0b0; }
+.folder-tree-label small { margin-left: auto; padding-left: 14px; font-size: 12px; color: #94a0b0; }
 .folder-content { overflow: hidden; display: flex; flex-direction: column; min-height: 580px; }
 .folder-content-heading { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 20px 22px 16px; }
 .folder-location { min-width: 0; }
-.folder-location h2 { margin: 0 0 7px; font-size: 20px; overflow-wrap: anywhere; }
-.folder-location p { margin: 0; color: #8793a1; font-size: 14px; overflow-wrap: anywhere; }
+.folder-location h2 { margin: 0 0 7px; font-size: 18px; overflow-wrap: anywhere; }
+.folder-location p { margin: 0; color: #8793a1; font-size: 12px; overflow-wrap: anywhere; }
 .folder-content-heading > .el-tag { flex-shrink: 0; }
 .folder-file-toolbar { display: flex; align-items: center; gap: 16px; padding: 0 22px 17px; flex-wrap: wrap; }
 .folder-file-toolbar > .el-input { width: 270px; max-width: 100%; }
-.folder-file-toolbar :deep(.el-checkbox__label) { font-size: 15px; }
+.folder-file-toolbar :deep(.el-checkbox__label) { font-size: 13px; }
 .folder-table-scroll { flex: 1; min-width: 0; }
-.folder-file-table { --el-table-header-bg-color: #f7f9fd; --el-table-header-text-color: #768396; font-size: 15px; }
+.folder-file-table { --el-table-header-bg-color: #f7f9fd; --el-table-header-text-color: #768396; font-size: 13px; }
 .folder-file-table :deep(th.el-table__cell) { height: 45px; font-weight: 500; }
 .folder-file-table :deep(td.el-table__cell) { height: 70px; }
 .folder-file-table :deep(.cell) { padding-left: 18px; padding-right: 14px; }
@@ -266,15 +298,15 @@ onMounted(loadFiles)
 .browser-file-name { cursor: pointer; }
 .browser-file-name > div { min-width: 0; }
 .browser-file-name strong, .browser-file-name small { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.browser-file-name strong { color: #38475a; font-weight: 600; font-size: 15px; }
-.browser-file-name small { margin-top: 3px; color: #98a2b1; font-size: 13px; }
-.folder-content-footer { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px; padding: 14px 22px; border-top: 1px solid #edf0f4; color: #939ca9; font-size: 13px; }
-.folder-notice { padding: 10px 22px; color: #b88230; background: #fdf6ec; font-size: 14px; }
+.browser-file-name strong { color: #38475a; font-weight: 600; font-size: 13px; }
+.browser-file-name small { margin-top: 3px; color: #98a2b1; font-size: 12px; }
+.folder-content-footer { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px; padding: 14px 22px; border-top: 1px solid #edf0f4; color: #939ca9; font-size: 12px; }
+.folder-notice { padding: 10px 22px; color: #b88230; background: #fdf6ec; font-size: 12px; }
 .file-detail-path { overflow-wrap: anywhere; }
 .file-editor-heading { display: flex; align-items: center; justify-content: space-between; gap: 18px; padding-right: 28px; }
 .file-editor-heading > div { min-width: 0; }
 .file-editor-heading strong, .file-editor-heading small { display: block; }
-.file-editor-heading strong { color: #24364d; font-size: 18px; }
+.file-editor-heading strong { color: #24364d; font-size: 16px; }
 .file-editor-heading small { margin-top: 5px; color: #8995a5; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .file-editor-body { min-height: 420px; }
 .file-editor-dialog :deep(.el-dialog__body) { padding: 8px 20px 12px; }

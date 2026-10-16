@@ -3,3 +3,4 @@ djangorestframework>=3.15,<4.0
 django-cors-headers>=4.6,<5.0
 paramiko>=3.5,<4.0
 cryptography>=43,<46
+openpyxl>=3.1,<4.0

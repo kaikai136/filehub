@@ -113,8 +113,8 @@ const chartOption = computed(() => {
     animationDuration: 500,
     grid: { left: 50, right: 20, top: 15, bottom: 34 },
     tooltip: { trigger: 'axis', backgroundColor: '#fff', borderColor: '#e7eaf0', textStyle: { color: '#303642' } },
-    xAxis: { type: 'category', boundaryGap: false, data: labels, axisLine: { lineStyle: { color: '#e9edf2' } }, axisTick: { show: false }, axisLabel: { color: '#98a0ad', fontSize: 15 } },
-    yAxis: { type: 'value', min: 0, max: 100, splitNumber: 4, axisLabel: { color: '#98a0ad', fontSize: 15, formatter: '{value}%' }, splitLine: { lineStyle: { color: '#f0f2f5', type: 'dashed' } } },
+    xAxis: { type: 'category', boundaryGap: false, data: labels, axisLine: { lineStyle: { color: '#e9edf2' } }, axisTick: { show: false }, axisLabel: { color: '#98a0ad', fontSize: 13 } },
+    yAxis: { type: 'value', min: 0, max: 100, splitNumber: 4, axisLabel: { color: '#98a0ad', fontSize: 13, formatter: '{value}%' }, splitLine: { lineStyle: { color: '#f0f2f5', type: 'dashed' } } },
     series: [
       { name: 'CPU 使用率', type: 'line', smooth: true, showSymbol: false, data: cpu, lineStyle: { width: 2.5, color: '#4388e8' }, areaStyle: { color: 'rgba(67,136,232,.08)' } },
       { name: '内存使用率', type: 'line', smooth: true, showSymbol: false, data: memory, lineStyle: { width: 2.5, color: '#39b77a' }, areaStyle: { color: 'rgba(57,183,122,.05)' } },

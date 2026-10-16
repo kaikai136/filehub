@@ -15,16 +15,16 @@
 import { computed, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { HomeFilled, Files, Document, DataLine, Setting, Expand, Fold, ArrowDown, ArrowRight, Search, QuestionFilled, Bell, Grid, Key, FolderOpened, List } from '@element-plus/icons-vue'
+import { HomeFilled, Files, Document, DataLine, Setting, Expand, Fold, ArrowDown, ArrowRight, Search, QuestionFilled, Bell, Grid, Key, FolderOpened, List, Collection } from '@element-plus/icons-vue'
 import { api, clearAuth } from './api'
 const route = useRoute(); const router = useRouter(); const collapsed = ref(false); const search = ref('')
 const groups = [
   { title: '总览', items: [{ label: '概览', path: '/', icon: HomeFilled }] },
-  { title: '资源管理', items: [{ label: '账号管理', path: '/accounts', icon: Key }, { label: '文件管理', path: '/file-configs', icon: FolderOpened }, { label: '文件列表', path: '/file-lists', icon: List }] },
+  { title: '资源管理', items: [{ label: '项目管理', path: '/projects', icon: Collection }, { label: '账号管理', path: '/accounts', icon: Key }, { label: '文件管理', path: '/file-configs', icon: FolderOpened }, { label: '文件列表', path: '/file-lists', icon: List }] },
   { title: '运维', items: [{ label: '监控', path: '/monitor', icon: DataLine }, { label: '计划任务', path: '/tasks', icon: Document }, { label: '操作日志', path: '/logs', icon: Files }] },
   { title: '系统', items: [{ label: '用户管理', path: '/users', icon: Setting }] },
 ]
-const titles: Record<string, string> = { '/': '概览', '/accounts': '账号管理', '/file-configs': '文件管理', '/file-lists': '文件列表', '/monitor': '监控', '/tasks': '计划任务', '/logs': '操作日志', '/users': '用户管理', '/settings': '设置' }
+const titles: Record<string, string> = { '/': '概览', '/projects': '项目管理', '/accounts': '账号管理', '/file-configs': '文件管理', '/file-lists': '文件列表', '/monitor': '监控', '/tasks': '计划任务', '/logs': '操作日志', '/users': '用户管理', '/settings': '设置' }
 const pageTitle = computed(() => titles[route.path] || '资源管理')
 async function logout() { try { await api.post('/auth/logout/') } catch { /* token may already be expired */ } clearAuth(); ElMessage.success('已退出登录'); router.push('/login') }
 </script>

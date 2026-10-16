@@ -1,4 +1,5 @@
 from django.urls import path
+from . import project_views, project_transfer
 from .views import (
     dashboard,
     accounts,
@@ -18,6 +19,13 @@ from .views import (
 )
 
 urlpatterns = [
+    path('projects/', project_views.projects),
+    path('projects/<int:project_id>/', project_views.project_detail),
+    path('file-configs/<int:config_id>/inspect/', project_views.inspect_config),
+    path('file-configs/batch/', project_views.batch_configs),
+    path('file-configs/import-template/', project_transfer.import_template),
+    path('file-configs/import/', project_transfer.import_configs),
+    path('file-configs/export/', project_transfer.export_configs),
     path("health/", health, name="health"),
     path("auth/login/", login, name="login"),
     path("auth/logout/", logout, name="logout"),
