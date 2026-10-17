@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import datetime
 from django.contrib.auth import authenticate, get_user_model
 from django.contrib.auth.models import update_last_login
 from django.contrib.auth.models import User
@@ -14,13 +14,14 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework import status
 
-from .models import Account, FileConfig, RemoteFile
+from .models import Account, FileConfig, OperationAudit, Project, RemoteFile
 from .audit import record_file_audit, record_operation_audit
 from .permissions import role_permissions
 from .rbac import require_any_permission, require_config_access, require_method_permissions, require_permission, require_superuser
 from .security import decrypt_value, encrypt_value
 from .ssh import connect, list_remote_files, read_remote_file, test_connection, write_remote_file
 from .projects import resolve_project, validate_config
+from .system_metrics import collect_system_metrics
 
 
 UserModel = get_user_model()
@@ -550,36 +551,24 @@ def file_content(request, file_id):
 @permission_classes([IsAuthenticated])
 @require_permission("dashboard.view")
 def dashboard(request):
-    now = timezone.localtime()
-    labels = [(now.replace(minute=0, second=0, microsecond=0) - timedelta(hours=11 - i)).strftime("%H:%M") for i in range(12)]
-    return Response({
-        "server": {
-            "name": "config-hub-01",
-            "address": "192.168.1.100",
-            "os": "Ubuntu 24.04 LTS",
-            "uptime": "12 天 8 小时",
-            "status": "online",
-        },
-        "metrics": [
-            {"key": "cpu", "label": "CPU 使用率", "value": 32, "unit": "%", "color": "#409eff", "trend": "+2.4%"},
-            {"key": "memory", "label": "内存使用", "value": 6.8, "unit": " / 16 GB", "color": "#67c23a", "trend": "-0.8 GB"},
-            {"key": "disk", "label": "磁盘空间", "value": 42, "unit": "%", "color": "#e6a23c", "trend": "128 / 500 GB"},
-            {"key": "network", "label": "网络流量", "value": 18.6, "unit": " MB/s", "color": "#f56c6c", "trend": "↑ 12.4  ↓ 6.2"},
-        ],
-        "chart": {
-            "labels": labels,
-            "cpu": [22, 28, 25, 34, 31, 42, 36, 29, 33, 27, 35, 32],
-            "memory": [41, 43, 42, 44, 43, 46, 45, 44, 43, 45, 44, 43],
-        },
-        "services": [
-            {"name": "Nginx", "description": "Web 服务器", "status": "运行中", "version": "1.26.2", "icon": "Connection", "color": "#e8f4ff"},
-            {"name": "MySQL", "description": "关系型数据库", "status": "运行中", "version": "8.0.40", "icon": "Coin", "color": "#fff3e0"},
-            {"name": "Docker", "description": "容器引擎", "status": "运行中", "version": "27.3.1", "icon": "Box", "color": "#e8f7ef"},
-            {"name": "Redis", "description": "缓存服务", "status": "运行中", "version": "7.4.1", "icon": "Grid", "color": "#fdecec"},
-        ],
-        "activity": [
-            {"title": "系统服务启动完成", "detail": "Nginx 服务已启动", "time": "10:42:18", "type": "success"},
-            {"title": "配置文件已更新", "detail": "nginx.conf 配置已保存", "time": "09:36:05", "type": "primary"},
-            {"title": "系统安全检查", "detail": "未发现风险项", "time": "08:15:32", "type": "success"},
-        ],
-    })
+    system_data = collect_system_metrics()
+    effective_permissions = role_permissions(request.user)
+    resource_definitions = [
+        ("projects.view", {"key": "projects", "label": "项目", "count": Project.objects.count(), "description": "项目目录节点", "path": "/projects"}),
+        ("accounts.view", {"key": "accounts", "label": "SSH 账号", "count": Account.objects.count(), "description": "已保存连接凭据", "path": "/accounts"}),
+        ("file_configs.view", {"key": "configs", "label": "文件配置", "count": FileConfig.objects.count(), "description": "远程主机文件配置", "path": "/file-configs"}),
+        ("file_lists.view", {"key": "files", "label": "远程文件", "count": RemoteFile.objects.count(), "description": "最近同步文件索引", "path": "/file-lists"}),
+    ]
+    resources = [resource for permission, resource in resource_definitions if permission in effective_permissions]
+    activity = []
+    if "operation_audit.view" in effective_permissions:
+        records = OperationAudit.objects.select_related("operator")[:5]
+        activity = [{
+            "id": record.id,
+            "title": f"{record.module} · {record.action}",
+            "detail": record.detail or record.object_name or "操作成功",
+            "operator": record.operator_name or record.operator_username or "系统",
+            "occurred_at": record.occurred_at.isoformat(),
+            "type": "primary",
+        } for record in records]
+    return Response({**system_data, "resources": resources, "activity": activity})

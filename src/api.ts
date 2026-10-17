@@ -47,9 +47,10 @@ export function clearAuth() {
 }
 
 export interface DashboardData {
+  sampled_at: string
   server: { name: string; address: string; os: string; uptime: string; status: string }
-  metrics: { key: string; label: string; value: number; unit: string; color: string; trend: string }[]
-  chart: { labels: string[]; cpu: number[]; memory: number[] }
-  services: { name: string; description: string; status: string; version: string; icon: string; color: string }[]
-  activity: { title: string; detail: string; time: string; type: string }[]
+  metrics: { key: string; label: string; value: number; unit: string; percentage: number | null; color: string; detail: string }[]
+  chart: { labels: string[]; timestamps: string[]; cpu: number[]; memory: number[] }
+  resources: { key: string; label: string; count: number; description: string; path: string }[]
+  activity: { id: number; title: string; detail: string; operator: string; occurred_at: string; type: string }[]
 }
