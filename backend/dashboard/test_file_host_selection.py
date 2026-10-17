@@ -29,6 +29,7 @@ class FileHostSelectionTests(APITestCase):
         self.assertEqual(response.status_code, 201)
         created = FileConfig.objects.get(pk=response.data['id'])
         self.assertNotEqual(created.pk, self.host.pk)
+        self.assertEqual(created.host_config_id, self.host.pk)
         self.assertEqual(created.project_node_id, self.host.project_node_id)
         self.assertEqual((created.ip_address, created.port, created.machine_name), ('192.0.2.1', 2222, 'remote-host'))
         self.assertEqual(created.file_path, '/etc/app')
@@ -62,7 +63,56 @@ class FileHostSelectionTests(APITestCase):
         self.assertTrue(RemoteFile.objects.filter(pk=cached.pk).exists())
         self.assertTrue(FileConfig.objects.filter(pk=self.host.pk).exists())
 
+    def test_creation_preserves_project_host_list(self):
+        before = self.client.get('/api/file-configs/', {'scope': 'hosts'})
+        for path in ['/etc/app', '/srv/app']:
+            response = self.client.post('/api/file-configs/', {**self.payload, 'file_path': path}, format='json')
+            self.assertEqual(response.status_code, 201)
+        after = self.client.get('/api/file-configs/', {'scope': 'hosts'})
+        self.assertEqual(after.status_code, 200)
+        self.assertEqual(after.data, before.data)
+        self.assertEqual(FileConfig.objects.count(), 3)
+
+    def test_legacy_file_records_are_linked_without_deleting_data(self):
+        from importlib import import_module
+        from django.apps import apps
+        legacy = FileConfig.objects.create(
+            project_node=self.host.project_node, project=self.host.project,
+            host_name=self.host.host_name, ip_address=self.host.ip_address,
+            port=self.host.port, account=self.account, file_path='/legacy',
+        )
+        migration = import_module('dashboard.migrations.0016_backfill_fileconfig_hosts')
+        migration.link_file_configs_to_hosts(apps, None)
+        migration.link_file_configs_to_hosts(apps, None)
+        legacy.refresh_from_db()
+        self.assertEqual(legacy.host_config_id, self.host.pk)
+        self.assertEqual(legacy.file_path, '/legacy')
+        self.assertEqual(FileConfig.objects.count(), 2)
+        response = self.client.get('/api/file-configs/', {'scope': 'hosts'})
+        self.assertEqual([item['id'] for item in response.data], [self.host.pk])
+
     def test_selection_requires_authentication(self):
         self.client.force_authenticate(user=None)
         response = self.client.post('/api/file-configs/', self.payload, format='json')
         self.assertEqual(response.status_code, 401)
+
+    def test_host_cannot_be_deleted_while_file_configs_are_linked(self):
+        created = self.client.post('/api/file-configs/', self.payload, format='json')
+        response = self.client.delete(f"/api/file-configs/{self.host.pk}/", data={'revision': self.host.revision}, format='json')
+        self.assertEqual(created.status_code, 201)
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('先删除文件管理记录', response.data['detail'])
+        self.assertTrue(FileConfig.objects.filter(pk=self.host.pk).exists())
+        self.assertEqual(self.client.delete(f"/api/file-configs/{created.data['id']}/", data={'revision': created.data['revision']}, format='json').status_code, 204)
+        self.assertEqual(self.client.delete(f"/api/file-configs/{self.host.pk}/", data={'revision': self.host.revision}, format='json').status_code, 204)
+
+    def test_project_batch_delete_rejects_linked_file_configs(self):
+        created = self.client.post('/api/file-configs/', self.payload, format='json')
+        response = self.client.post('/api/file-configs/batch/', {
+            'action': 'delete', 'items': [{'id': self.host.pk, 'revision': self.host.revision}],
+        }, format='json')
+        self.assertEqual(created.status_code, 201)
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(response.data['results'][0]['success'])
+        self.assertIn('先删除文件管理记录', response.data['results'][0]['error'])
+        self.assertTrue(FileConfig.objects.filter(pk=self.host.pk).exists())

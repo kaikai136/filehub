@@ -4,6 +4,7 @@ from . import rbac_views
 from . import audit_views
 from . import settings_views
 from . import notification_views
+from . import command_views
 from .views import (
     dashboard,
     accounts,
@@ -25,6 +26,10 @@ from .views import (
 )
 
 urlpatterns = [
+    path('command-executions/options/', command_views.command_options),
+    path('command-executions/', command_views.command_executions),
+    path('command-executions/<int:execution_id>/', command_views.command_execution_detail),
+    path('command-executions/<int:execution_id>/stop/', command_views.stop_command_execution),
     path('notifications/', notification_views.notifications),
     path('notifications/read-all/', notification_views.mark_all_notifications_read),
     path('notifications/<int:notification_id>/read/', notification_views.mark_notification_read),

@@ -85,7 +85,7 @@ let loadVersion = 0
 async function load() {
   const version = ++loadVersion; loading.value = true; pageError.value = ''
   try {
-    const [p, c] = await Promise.all([api.get<Project[]>('/projects/'), api.get<Config[]>('/file-configs/')])
+    const [p, c] = await Promise.all([api.get<Project[]>('/projects/'), api.get<Config[]>('/file-configs/', { params: { scope: 'hosts' } })])
     if (version !== loadVersion) return
     projects.value = p.data; configs.value = c.data
     if (selectedProject.value !== null && !projects.value.some(p => p.id === selectedProject.value)) selectedProject.value = null

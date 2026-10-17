@@ -17,6 +17,7 @@ import Forbidden from './views/Forbidden.vue'
 import FileAudit from './views/FileAudit.vue'
 import OperationAudit from './views/OperationAudit.vue'
 import Settings from './views/Settings.vue'
+import CommandExecution from './views/CommandExecution.vue'
 import { clearAuth } from './api'
 import { authUser, refreshAuth } from './composables/useAuth'
 import { refreshSettings } from './composables/useSettings'
@@ -37,6 +38,7 @@ const router = createRouter({
     { path: '/projects', component: Projects, meta: { title: '项目管理' } },
     { path: '/file-audits', component: FileAudit, meta: { title: '文件审计' } },
     { path: '/operation-audits', component: OperationAudit, meta: { title: '操作审计' } },
+    { path: '/command-executions', component: CommandExecution, meta: { title: '命令执行' } },
     { path: '/settings', component: Settings, meta: { title: '系统设置' } },
     { path: '/:pathMatch(.*)*', component: ModulePage },
   ],

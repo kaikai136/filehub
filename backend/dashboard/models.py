@@ -110,6 +110,74 @@ class ConfigNotificationRead(models.Model):
         ]
 
 
+class CommandExecution(models.Model):
+    MODE_CHOICES = [("shell", "Shell"), ("k8s", "K8s")]
+    STATUS_CHOICES = [
+        ("queued", "排队中"),
+        ("running", "执行中"),
+        ("succeeded", "成功"),
+        ("failed", "失败"),
+        ("stopped", "已停止"),
+        ("timeout", "超时"),
+    ]
+
+    operator = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL,
+        related_name="command_executions",
+    )
+    operator_name = models.CharField(max_length=255, blank=True, default="")
+    operator_username = models.CharField(max_length=150, blank=True, default="")
+    file_config = models.ForeignKey(
+        "FileConfig", null=True, blank=True, on_delete=models.SET_NULL,
+        related_name="command_executions",
+    )
+    project_name = models.CharField(max_length=500, blank=True, default="")
+    host_name = models.CharField(max_length=150, blank=True, default="")
+    ip_address = models.GenericIPAddressField()
+    port = models.PositiveIntegerField(default=22)
+    mode = models.CharField(max_length=20, choices=MODE_CHOICES)
+    working_directory = models.CharField(max_length=500, default="/root")
+    remote_file = models.ForeignKey(
+        "RemoteFile", null=True, blank=True, on_delete=models.SET_NULL,
+        related_name="command_executions",
+    )
+    file_path = models.CharField(max_length=1000, blank=True, default="")
+    command = models.TextField()
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="queued")
+    exit_code = models.IntegerField(null=True, blank=True)
+    error_message = models.TextField(blank=True, default="")
+    output_truncated = models.BooleanField(default=False)
+    stop_requested = models.BooleanField(default=False)
+    requested_ip = models.GenericIPAddressField(null=True, blank=True)
+    started_at = models.DateTimeField(null=True, blank=True)
+    finished_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at", "-id"]
+        indexes = [
+            models.Index(fields=["-created_at"], name="command_exec_time_idx"),
+            models.Index(fields=["status", "-created_at"], name="command_exec_status_idx"),
+            models.Index(fields=["operator", "-created_at"], name="command_exec_user_idx"),
+        ]
+
+
+class CommandExecutionOutput(models.Model):
+    STREAM_CHOICES = [("stdout", "stdout"), ("stderr", "stderr")]
+
+    execution = models.ForeignKey(CommandExecution, on_delete=models.CASCADE, related_name="outputs")
+    stream = models.CharField(max_length=10, choices=STREAM_CHOICES)
+    sequence = models.PositiveIntegerField()
+    content = models.TextField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["sequence"]
+        constraints = [
+            models.UniqueConstraint(fields=["execution", "sequence"], name="unique_command_output_sequence"),
+        ]
+
+
 class SystemSetting(models.Model):
     """The single persisted set of console-wide preferences."""
     WATERMARK_MODES = [("username", "登录用户名"), ("custom", "自定义文字")]
@@ -168,6 +236,10 @@ class Project(models.Model):
 
 
 class FileConfig(models.Model):
+    host_config = models.ForeignKey(
+        'self', null=True, blank=True, on_delete=models.CASCADE,
+        related_name='path_configs', editable=False,
+    )
     project_node = models.ForeignKey(Project, null=True, blank=True, on_delete=models.PROTECT, related_name='configs')
     project = models.CharField(max_length=150, verbose_name="项目")
     host_name = models.CharField(max_length=150, verbose_name="主机名称")

@@ -96,3 +96,46 @@ export interface NotificationResponse {
   unread_count: number
   latest: ConfigNotification | null
 }
+
+export type CommandStatus = 'queued' | 'running' | 'succeeded' | 'failed' | 'stopped' | 'timeout'
+
+export interface CommandOutput {
+  id: number
+  stream: 'stdout' | 'stderr'
+  sequence: number
+  content: string
+  created_at: string
+}
+
+export interface CommandExecution {
+  id: number
+  operator: string
+  project: string
+  host_name: string
+  ip_address: string
+  port: number
+  mode: 'shell' | 'k8s'
+  working_directory: string
+  remote_file_id: number | null
+  file_path: string
+  command: string
+  status: CommandStatus
+  exit_code: number | null
+  error_message: string
+  output_truncated: boolean
+  stop_requested: boolean
+  started_at: string | null
+  finished_at: string | null
+  created_at: string
+  outputs?: CommandOutput[]
+  websocket_path?: string
+}
+
+export interface CommandMachine {
+  id: number
+  project: string
+  host_name: string
+  ip_address: string
+  port: number
+  files: { id: number; name: string; relative_path: string; path: string }[]
+}

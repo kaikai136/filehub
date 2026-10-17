@@ -9,6 +9,10 @@ export default defineConfig(({ mode }) => {
       port: 5173,
       proxy: {
         '/api': env.VITE_API_PROXY_TARGET || 'http://127.0.0.1:8000',
+        '/ws': {
+          target: env.VITE_WS_PROXY_TARGET || env.VITE_API_PROXY_TARGET || 'http://127.0.0.1:8000',
+          ws: true,
+        },
       },
     },
   }

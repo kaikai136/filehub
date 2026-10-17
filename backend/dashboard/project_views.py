@@ -125,6 +125,9 @@ def batch_configs(request):
                 results.append({'id': item['id'], 'success': False, 'error': '记录不存在或已更新，请刷新'})
                 continue
             if action == 'delete':
+                if config.host_config_id is None and config.path_configs.exists():
+                    results.append({'id': item['id'], 'success': False, 'error': '该机器已关联文件管理记录，请先删除文件管理记录后再删除机器'})
+                    continue
                 snapshot = config_snapshot(config)
                 config.delete()
                 notification_events.append(('deleted', None, snapshot))

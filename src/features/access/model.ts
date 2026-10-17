@@ -10,6 +10,7 @@ export const routePermissions: Record<string, string> = {
   '/': 'dashboard.view', '/projects': 'projects.view', '/accounts': 'accounts.view',
   '/file-configs': 'file_configs.view', '/file-lists': 'file_lists.view',
   '/file-audits': 'file_audit.view', '/operation-audits': 'operation_audit.view', '/settings': 'settings.view',
+  '/command-executions': 'command_execution.view',
 }
 
 export function can(user: SessionUser | null, permission: string) {

@@ -11,6 +11,8 @@ py manage.py migrate
 py manage.py runserver 127.0.0.1:8000
 ```
 
+`runserver` 由 Daphne/ASGI 提供服务，以支持命令执行页面的 WebSocket 实时输出。生产环境使用单 ASGI 进程时可沿用内存 Channel Layer；多进程部署需要配置 Redis Channel Layer。
+
 ## 启动前端
 
 ```powershell

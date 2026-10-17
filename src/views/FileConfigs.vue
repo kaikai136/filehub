@@ -91,7 +91,7 @@ async function openCreate() {
   dialogVisible.value = true; choicesLoading.value = true
   await nextTick(); formRef.value?.clearValidate()
   try {
-    const [p, h] = await Promise.all([api.get<Project[]>('/projects/'), api.get<Config[]>('/file-configs/')])
+    const [p, h] = await Promise.all([api.get<Project[]>('/projects/'), api.get<Config[]>('/file-configs/', { params: { scope: 'hosts' } })])
     if (version !== choicesVersion) return
     projects.value = p.data; hostChoices.value = h.data
   } catch { if (version === choicesVersion) choicesError.value = '加载项目和机器失败，请关闭窗口后重试' }

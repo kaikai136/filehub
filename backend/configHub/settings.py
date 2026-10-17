@@ -6,6 +6,7 @@ DEBUG = True
 ALLOWED_HOSTS = ["*"]
 
 INSTALLED_APPS = [
+    "daphne",
     "django.contrib.admin",
     "django.contrib.auth",
     "django.contrib.contenttypes",
@@ -42,6 +43,9 @@ TEMPLATES = [{
 }]
 WSGI_APPLICATION = "configHub.wsgi.application"
 ASGI_APPLICATION = "configHub.asgi.application"
+CHANNEL_LAYERS = {
+    "default": {"BACKEND": "channels.layers.InMemoryChannelLayer"},
+}
 
 DATABASES = {
     "default": {

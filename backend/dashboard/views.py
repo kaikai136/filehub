@@ -61,6 +61,7 @@ def serialize_account(account):
 def serialize_file_config(config):
     return {
         "id": config.id,
+        "host_config_id": config.host_config_id,
         "project": config.project,
         "project_id": config.project_node_id,
         "project_path": config.project_node.path if config.project_node_id else config.project,
@@ -269,6 +270,8 @@ def file_configs(request):
     if request.method == "GET":
         query = str(request.query_params.get("search", "")).strip()
         queryset = FileConfig.objects.select_related("account", "project_node").annotate(file_count=Count("remote_files"))
+        if request.query_params.get("scope") == "hosts":
+            queryset = queryset.filter(host_config__isnull=True)
         if query:
             queryset = queryset.filter(project__icontains=query) | queryset.filter(host_name__icontains=query) | queryset.filter(ip_address__icontains=query)
         return Response([serialize_file_config(config) for config in queryset])
@@ -280,7 +283,7 @@ def file_configs(request):
         # Copy the selected host's own credentials, not its potentially edited
         # account template. Resolve everything again when the form is submitted.
         with transaction.atomic():
-            source = FileConfig.objects.select_for_update().filter(pk=data['source_config_id']).first()
+            source = FileConfig.objects.select_for_update().filter(pk=data['source_config_id'], host_config__isnull=True).first()
             if source is None:
                 return Response({'detail': '所选机器不存在，请重新选择'}, status=400)
             if data.get('source_revision') != source.revision:
@@ -291,7 +294,7 @@ def file_configs(request):
             if not isinstance(path, str) or not path.strip() or len(path.strip()) > 500:
                 return Response({'detail': '请填写有效文件路径（最多 500 字符）'}, status=400)
             config = FileConfig.objects.create(
-                project_node=source.project_node, project=source.project,
+                host_config=source, project_node=source.project_node, project=source.project,
                 host_name=source.host_name, ip_address=source.ip_address,
                 machine_name=source.machine_name, port=source.port,
                 account=source.account, account_snapshot=source.account_snapshot.copy(),
@@ -339,6 +342,8 @@ def file_config_detail(request, config_id):
             current = FileConfig.objects.select_for_update().get(pk=config.pk)
             if 'revision' in request.data and request.data['revision'] != current.revision:
                 return Response({'detail': '此记录已更新，请刷新后重试'}, status=409)
+            if current.host_config_id is None and current.path_configs.exists():
+                return Response({'detail': '该机器已关联文件管理记录，请先删除文件管理记录后再删除机器'}, status=400)
             current.delete()
         record_operation_audit(request, '文件管理', '删除', object_name, '删除文件管理配置')
         record_config_notification(request, "deleted", snapshot=deleted_snapshot)
