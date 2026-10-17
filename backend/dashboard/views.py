@@ -15,6 +15,7 @@ from rest_framework.response import Response
 from rest_framework import status
 
 from .models import Account, FileConfig, RemoteFile
+from .audit import record_file_audit, record_operation_audit
 from .permissions import role_permissions
 from .rbac import require_any_permission, require_config_access, require_method_permissions, require_permission, require_superuser
 from .security import decrypt_value, encrypt_value
@@ -134,6 +135,7 @@ def login(request):
     token, _ = Token.objects.get_or_create(user=user)
     update_last_login(None, user)
     user.refresh_from_db(fields=["last_login"])
+    record_operation_audit(request, '认证', '登录', user.username, 'Token 登录成功', user=user)
     return Response({"token": token.key, "user": serialize_user(user)})
 
 
@@ -141,6 +143,7 @@ def login(request):
 @authentication_classes([TokenAuthentication])
 @permission_classes([IsAuthenticated])
 def logout(request):
+    record_operation_audit(request, '认证', '退出登录', request.user.username, '用户退出登录')
     Token.objects.filter(user=request.user).delete()
     return Response({"detail": "已退出登录"})
 
@@ -193,6 +196,7 @@ def accounts(request):
         note=str(data.get("note", "")).strip(),
         is_active=bool(data.get("is_active", True)),
     )
+    record_operation_audit(request, 'SSH 账号', '新增', account.name, '创建 SSH 账号')
     return Response(serialize_account(account), status=status.HTTP_201_CREATED)
 
 
@@ -216,7 +220,9 @@ def account_detail(request, account_id):
     if request.method == "DELETE":
         if account.file_configs.exists():
             return Response({"detail": "该账号已被文件管理配置引用，请先解除引用"}, status=status.HTTP_409_CONFLICT)
+        object_name = account.name
         account.delete()
+        record_operation_audit(request, 'SSH 账号', '删除', object_name, '删除 SSH 账号')
         return Response(status=status.HTTP_204_NO_CONTENT)
 
     data = request.data
@@ -230,6 +236,8 @@ def account_detail(request, account_id):
     if "private_key" in data and str(data["private_key"]):
         account.encrypted_private_key = encrypt_value(str(data["private_key"]))
     account.save()
+    action = '启用/禁用' if set(data).issubset({'is_active'}) else '编辑'
+    record_operation_audit(request, 'SSH 账号', action, account.name, '更新 SSH 账号')
     return Response(serialize_account(account))
 
 
@@ -276,6 +284,7 @@ def file_configs(request):
                 account=source.account, account_snapshot=source.account_snapshot.copy(),
                 file_path=path.strip(),
             )
+        record_operation_audit(request, '文件管理', '新增', config.file_path, '创建文件管理配置')
         return Response(serialize_file_config(config), status=status.HTTP_201_CREATED)
     required = ("host_name", "ip_address", "account_id")
     if any(not data.get(field) for field in required):
@@ -295,6 +304,7 @@ def file_configs(request):
         )
     except (ValueError, TypeError) as error:
         return Response({"detail": str(error)}, status=status.HTTP_400_BAD_REQUEST)
+    record_operation_audit(request, '项目管理', '新增', config.host_name, '创建项目主机配置')
     return Response(serialize_file_config(config), status=status.HTTP_201_CREATED)
 
 
@@ -308,11 +318,13 @@ def file_config_detail(request, config_id):
     except FileConfig.DoesNotExist:
         return Response({"detail": "文件管理配置不存在"}, status=status.HTTP_404_NOT_FOUND)
     if request.method == "DELETE":
+        object_name = config.file_path or config.host_name
         with transaction.atomic():
             current = FileConfig.objects.select_for_update().get(pk=config.pk)
             if 'revision' in request.data and request.data['revision'] != current.revision:
                 return Response({'detail': '此记录已更新，请刷新后重试'}, status=409)
             current.delete()
+        record_operation_audit(request, '文件管理', '删除', object_name, '删除文件管理配置')
         return Response(status=status.HTTP_204_NO_CONTENT)
     data = request.data
     if "revision" in data and data["revision"] != config.revision:
@@ -372,6 +384,7 @@ def file_config_detail(request, config_id):
             config.remote_files.update(project=config.project)
         config.save(update_fields=fields)
     config.refresh_from_db()
+    record_operation_audit(request, '文件管理', '编辑', config.file_path or config.host_name, '更新文件管理配置')
     return Response(serialize_file_config(config))
 
 
@@ -467,7 +480,10 @@ def file_config_test_connection(request, config_id):
         config = FileConfig.objects.select_related("account").get(id=config_id)
     except FileConfig.DoesNotExist:
         return Response({"detail": "文件管理配置不存在"}, status=status.HTTP_404_NOT_FOUND)
-    return _run_remote_action(config)
+    response = _run_remote_action(config)
+    if response.status_code < 400:
+        record_operation_audit(request, '文件管理', '执行', config.file_path or config.host_name, '测试 SSH 连接')
+    return response
 
 
 @api_view(["POST"])
@@ -481,7 +497,10 @@ def file_config_refresh(request, config_id):
         return Response({"detail": "文件管理配置不存在"}, status=status.HTTP_404_NOT_FOUND)
     if not config.file_path.strip():
         return Response({"detail": "未配置文件路径，无法获取文件列表"}, status=status.HTTP_400_BAD_REQUEST)
-    return _run_remote_action(config, refresh=True)
+    response = _run_remote_action(config, refresh=True)
+    if response.status_code < 400:
+        record_operation_audit(request, '文件管理', '执行', config.file_path, '获取远程文件列表')
+    return response
 
 
 @api_view(["GET"])
@@ -514,10 +533,13 @@ def file_content(request, file_id):
         content = request.data.get("content")
         if not isinstance(content, str):
             return Response({"detail": "文件内容格式无效"}, status=status.HTTP_400_BAD_REQUEST)
+        before = read_remote_file(remote_file)
         attrs = write_remote_file(remote_file, content)
         remote_file.size = attrs.st_size
         remote_file.modified_at = timezone.make_aware(datetime.fromtimestamp(attrs.st_mtime)) if attrs.st_mtime else None
         remote_file.save(update_fields=["size", "modified_at", "fetched_at"])
+        record_file_audit(request, remote_file, before, content)
+        record_operation_audit(request, '文件列表', '编辑', remote_file.relative_path, '保存远程文件内容')
         return Response({"detail": "文件保存成功", "file": serialize_remote_file(remote_file)})
     except Exception as error:
         return Response({"detail": str(error)}, status=status.HTTP_400_BAD_REQUEST)

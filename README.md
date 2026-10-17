@@ -1,4 +1,4 @@
-# ConfigHub
+# FileHub
 
 Django + Vue 3 运维控制台，前端交互与布局参考 `C:\Users\kaikai\Desktop\kaikai\1Panel\frontend`。
 
@@ -33,6 +33,8 @@ npm run dev
 - `GET/POST /api/roles/`：超级管理员查询、新增角色
 - `PATCH/DELETE /api/roles/:id/`：超级管理员编辑、启用/禁用、删除角色
 - `GET /api/roles/:id/users/`：超级管理员查询角色成员
+- `GET /api/file-audits/`、`GET /api/file-audits/:id/`：分页查询文件变更审计及差异详情
+- `GET /api/operation-audits/`：分页查询系统关键操作审计
 - `GET/POST /api/accounts/`：账号列表、新增账号
 - `PATCH/DELETE /api/accounts/:id/`：编辑、删除账号
 - `GET/POST /api/file-configs/`：文件管理配置列表、新增配置（支持 `project_id`）

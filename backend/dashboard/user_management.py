@@ -7,6 +7,7 @@ from rest_framework.exceptions import ValidationError
 from rest_framework.response import Response
 
 from .models import Role
+from .audit import record_operation_audit
 
 UserModel = get_user_model()
 
@@ -68,6 +69,7 @@ def list_or_create_users(request):
             user.roles.set(roles)
     except IntegrityError:
         raise ValidationError({'detail': '登录名已存在'})
+    record_operation_audit(request, '用户管理', '新增', user.username, '创建用户')
     return Response(serialize_user(user), status=201)
 
 
@@ -87,7 +89,9 @@ def update_or_delete_user(request, user_id):
     if destructive and user.is_superuser and user.is_active and not any(item.is_superuser and item.is_active and item.pk != user.pk for item in users):
         return Response({'detail': '不能停用或删除最后一个有效超级管理员'}, status=400)
     if request.method == 'DELETE':
+        object_name = user.username
         user.delete()
+        record_operation_audit(request, '用户管理', '删除', object_name, '删除用户')
         return Response(status=204)
     roles = selected_roles(data, user)
     for key, attribute in [('name', 'first_name'), ('email', 'email'), ('is_active', 'is_active')]:
@@ -102,4 +106,6 @@ def update_or_delete_user(request, user_id):
         user.roles.set(roles)
     if not user.is_active or data.get('password'):
         Token.objects.filter(user=user).delete()
+    action = '启用/禁用' if 'is_active' in data and set(data).issubset({'is_active', 'role_ids'}) else '编辑'
+    record_operation_audit(request, '用户管理', action, user.username, '更新用户')
     return Response(serialize_user(user))

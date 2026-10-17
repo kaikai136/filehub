@@ -301,7 +301,8 @@ class FileConfigActionTests(APITestCase):
         read_remote_file.assert_called_once()
 
     @patch("dashboard.views.write_remote_file")
-    def test_file_content_can_be_saved(self, write_remote_file):
+    @patch("dashboard.views.read_remote_file", return_value="server:\n  port: 8080\n")
+    def test_file_content_can_be_saved(self, read_remote_file, write_remote_file):
         remote_file = self.snapshot()
         write_remote_file.return_value = SimpleNamespace(st_size=18, st_mtime=1_700_000_000)
         response = self.client.patch(f"/api/file-lists/{remote_file.pk}/", {"content": "server:\n  port: 80\n"})

@@ -2,7 +2,7 @@
   <div class="login-page">
     <div class="login-background"></div>
     <div class="login-card">
-      <div class="login-brand"><span class="login-mark"><el-icon><Grid /></el-icon></span><strong>ConfigHub</strong></div>
+      <div class="login-brand"><span class="login-mark"><el-icon><Grid /></el-icon></span><strong>FileHub</strong></div>
       <div class="login-heading"><h1>欢迎回来</h1><p>登录运维控制台，管理您的服务器资源</p></div>
       <el-form ref="formRef" :model="form" :rules="rules" @submit.prevent="submit">
         <el-form-item prop="username"><el-input v-model="form.username" size="large" placeholder="用户名" :prefix-icon="UserIcon" /></el-form-item>
@@ -11,7 +11,7 @@
         <el-button class="login-submit" type="primary" size="large" native-type="submit" :loading="loading">登录</el-button>
       </el-form>
       <div class="login-hint">开发环境默认管理员：<b>admin / admin123</b></div>
-      <div class="login-footer">ConfigHub 运维控制台 · v1.0.0</div>
+      <div class="login-footer">FileHub 运维控制台 · v1.0.0</div>
     </div>
   </div>
 </template>

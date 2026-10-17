@@ -28,7 +28,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { useRoute } from 'vue-router'
-import { Box, Coin, Connection, Document, Files, Monitor, MoreFilled, Plus, Search, Setting } from '@element-plus/icons-vue'
+import { Box, Coin, Connection, Files, Monitor, MoreFilled, Plus, Search, Setting } from '@element-plus/icons-vue'
 
 const route = useRoute()
 const query = ref('')
@@ -52,7 +52,7 @@ const configs: Record<string, { title: string; description: string; icon: unknow
     { name: 'redis-cache', detail: 'Redis 7.4 · 127.0.0.1:6379', running: true, updated: '今天 08:30', icon: Coin },
   ] },
   files: { title: '文件', description: '浏览和管理服务器文件。', icon: Files, items: [
-    { name: '/opt/configHub', detail: '项目目录 · 24 个文件', running: true, updated: '刚刚', icon: Files },
+    { name: '/opt/fileHub', detail: '项目目录 · 24 个文件', running: true, updated: '刚刚', icon: Files },
     { name: '/var/www', detail: '网站目录 · 8 个站点', running: true, updated: '今天 10:15', icon: Files },
     { name: '/var/backups', detail: '备份目录 · 12 个归档', running: true, updated: '昨天', icon: Files },
   ] },
@@ -64,13 +64,8 @@ const configs: Record<string, { title: string; description: string; icon: unknow
     { name: '每日数据库备份', detail: '每天 02:00 · /var/backups', running: true, updated: '下次运行 02:00', icon: Setting },
     { name: '清理临时文件', detail: '每周日 03:00', running: true, updated: '下次运行 周日', icon: Setting },
   ] },
-  terminal: { title: '终端', description: '已连接到本机节点。', icon: Connection, items: [
-    { name: '本机终端', detail: '192.168.1.100 · SSH 已就绪', running: true, updated: '在线', icon: Connection },
-  ] },
-  logs: { title: '操作日志', description: '查看近期系统操作与审计记录。', icon: Document, items: [
-    { name: '服务重载', detail: '管理员 · Nginx 配置重载成功', running: true, updated: '10:42:18', icon: Document },
-    { name: '配置更新', detail: '管理员 · 修改网站反向代理', running: true, updated: '09:36:05', icon: Document },
-    { name: '安全检查', detail: '系统 · 未发现风险项', running: true, updated: '08:15:32', icon: Document },
+  terminal: { title: '终端', description: '终端连接已就绪。', icon: Connection, items: [
+    { name: '终端会话', detail: '192.168.1.100 · SSH 已就绪', running: true, updated: '在线', icon: Connection },
   ] },
   settings: { title: '设置', description: '管理控制台偏好与节点配置。', icon: Setting, items: [
     { name: '基础设置', detail: '语言、时区与界面偏好', running: true, updated: '控制台', icon: Setting },

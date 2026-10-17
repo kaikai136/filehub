@@ -1,6 +1,7 @@
 from django.urls import path
 from . import project_views, project_transfer
 from . import rbac_views
+from . import audit_views
 from .views import (
     dashboard,
     accounts,
@@ -21,6 +22,9 @@ from .views import (
 )
 
 urlpatterns = [
+    path('file-audits/', audit_views.file_audits),
+    path('file-audits/<int:audit_id>/', audit_views.file_audit_detail),
+    path('operation-audits/', audit_views.operation_audits),
     path('permissions/', rbac_views.permission_catalog),
     path('roles/', rbac_views.roles),
     path('roles/<int:role_id>/', rbac_views.role_detail),

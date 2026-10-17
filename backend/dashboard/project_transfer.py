@@ -13,6 +13,7 @@ from rest_framework.response import Response
 from .models import Account, FileConfig, Project
 from .projects import validate_config
 from .rbac import require_permission
+from .audit import record_operation_audit
 
 IMPORT_COLUMNS = [('项目完整路径', 'project_path'), ('节点名称', 'host_name'), ('IP地址', 'ip_address'),
                   ('端口', 'port'), ('账号名称', 'account_name')]
@@ -120,6 +121,7 @@ def export_configs(request):
                      spec.get('cpu'), spec.get('memory_bytes'), spec.get('disk_bytes'), spec.get('system'),
                      spec.get('arch'), config.platform_type, config.connection_status,
                      config.updated_at.isoformat()])
+    record_operation_audit(request, '项目管理', '导出', '主机配置', f'导出 {len(ids)} 条配置')
     return workbook_response(rows, 'hosts.xlsx')
 
 
@@ -161,4 +163,5 @@ def import_configs(request):
                 **{key: row[key] for key in ('host_name', 'ip_address', 'port', 'account_id')},
                 machine_name='', file_path='')
             created += 1
+    record_operation_audit(request, '项目管理', '导入', '主机配置', f'导入 {created} 条，跳过 {len(rows) - created} 条')
     return Response({'created': created, 'skipped': len(rows) - created})

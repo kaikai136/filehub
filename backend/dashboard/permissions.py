@@ -6,7 +6,8 @@ PERMISSION_GROUPS = [
     {"key": "file_lists", "label": "文件列表", "permissions": [("view", "查看"), ("edit", "编辑")]},
     {"key": "monitor", "label": "监控", "permissions": [("view", "查看")]},
     {"key": "tasks", "label": "计划任务", "permissions": [("view", "查看")]},
-    {"key": "logs", "label": "操作日志", "permissions": [("view", "查看")]},
+    {"key": "file_audit", "label": "文件审计", "permissions": [("view", "查看")]},
+    {"key": "operation_audit", "label": "操作审计", "permissions": [("view", "查看")]},
     {"key": "settings", "label": "设置", "permissions": [("view", "查看")]},
 ]
 

@@ -9,7 +9,7 @@ export interface SessionUser {
 export const routePermissions: Record<string, string> = {
   '/': 'dashboard.view', '/projects': 'projects.view', '/accounts': 'accounts.view',
   '/file-configs': 'file_configs.view', '/file-lists': 'file_lists.view',
-  '/monitor': 'monitor.view', '/tasks': 'tasks.view', '/logs': 'logs.view', '/settings': 'settings.view',
+  '/file-audits': 'file_audit.view', '/operation-audits': 'operation_audit.view', '/settings': 'settings.view',
 }
 
 export function can(user: SessionUser | null, permission: string) {

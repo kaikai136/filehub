@@ -11,6 +11,7 @@ from rest_framework import status
 from .models import Role
 from .permissions import ALL_PERMISSIONS, PERMISSION_CATALOG, normalize_permissions
 from .rbac import require_superuser
+from .audit import record_operation_audit
 
 
 ROLE_CODE = re.compile(r"^[a-z0-9_]+$")
@@ -71,6 +72,7 @@ def roles(request):
             role = Role.objects.create(**values, is_active=bool(request.data.get("is_active", True)))
     except IntegrityError:
         return Response({"detail": "角色名称或角色标识已存在"}, status=status.HTTP_400_BAD_REQUEST)
+    record_operation_audit(request, '角色管理', '新增', role.name, '创建角色')
     return Response(serialize_role(role), status=status.HTTP_201_CREATED)
 
 
@@ -86,7 +88,9 @@ def role_detail(request, role_id):
     if request.method == "DELETE":
         if role.users.exists():
             return Response({"detail": "角色仍有关联用户，不能删除"}, status=status.HTTP_400_BAD_REQUEST)
+        object_name = role.name
         role.delete()
+        record_operation_audit(request, '角色管理', '删除', object_name, '删除角色')
         return Response(status=status.HTTP_204_NO_CONTENT)
     if "code" in request.data and str(request.data["code"]).strip() != role.code:
         return Response({"detail": "角色标识创建后不可修改"}, status=status.HTTP_400_BAD_REQUEST)
@@ -104,6 +108,8 @@ def role_detail(request, role_id):
             role = locked
     except IntegrityError:
         return Response({"detail": "角色名称已存在"}, status=status.HTTP_400_BAD_REQUEST)
+    action = '启用/禁用' if set(request.data).issubset({'is_active'}) else '编辑'
+    record_operation_audit(request, '角色管理', action, role.name, '更新角色')
     return Response(serialize_role(role))
 
 

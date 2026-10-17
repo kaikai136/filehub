@@ -21,6 +21,49 @@ class Role(models.Model):
         return self.name
 
 
+class FileAudit(models.Model):
+    project_name = models.CharField(max_length=255, verbose_name="项目名")
+    project_id = models.BigIntegerField(null=True, blank=True, verbose_name="项目 ID")
+    ip_address = models.GenericIPAddressField(verbose_name="IP 地址")
+    directory = models.CharField(max_length=500, verbose_name="文件目录")
+    relative_path = models.CharField(max_length=500, verbose_name="文件相对路径")
+    operator = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name="file_audits")
+    operator_name = models.CharField(max_length=255, blank=True, default="")
+    operator_username = models.CharField(max_length=150, blank=True, default="")
+    changed_at = models.DateTimeField(auto_now_add=True, verbose_name="更改时间")
+    diff = models.TextField(verbose_name="变更内容")
+    file_config = models.ForeignKey("FileConfig", null=True, blank=True, on_delete=models.SET_NULL, related_name="file_audits")
+    remote_file = models.ForeignKey("RemoteFile", null=True, blank=True, on_delete=models.SET_NULL, related_name="audits")
+
+    class Meta:
+        ordering = ["-changed_at", "-id"]
+        indexes = [
+            models.Index(fields=["-changed_at"], name="file_audit_time_idx"),
+            models.Index(fields=["ip_address", "-changed_at"], name="file_audit_ip_time_idx"),
+            models.Index(fields=["project_id", "-changed_at"], name="file_audit_project_idx"),
+        ]
+
+
+class OperationAudit(models.Model):
+    occurred_at = models.DateTimeField(auto_now_add=True, verbose_name="时间")
+    operator = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name="operation_audits")
+    operator_name = models.CharField(max_length=255, blank=True, default="")
+    operator_username = models.CharField(max_length=150, blank=True, default="")
+    module = models.CharField(max_length=80, verbose_name="模块")
+    action = models.CharField(max_length=80, verbose_name="操作")
+    object_name = models.CharField(max_length=255, blank=True, default="", verbose_name="对象")
+    ip_address = models.GenericIPAddressField(null=True, blank=True, verbose_name="IP")
+    detail = models.TextField(blank=True, default="", verbose_name="详情")
+
+    class Meta:
+        ordering = ["-occurred_at", "-id"]
+        indexes = [
+            models.Index(fields=["-occurred_at"], name="operation_audit_time_idx"),
+            models.Index(fields=["module", "-occurred_at"], name="operation_audit_module_idx"),
+            models.Index(fields=["ip_address", "-occurred_at"], name="operation_audit_ip_idx"),
+        ]
+
+
 class Account(models.Model):
     name = models.CharField(max_length=100, verbose_name="账号名称")
     username = models.CharField(max_length=150, verbose_name="用户")

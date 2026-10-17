@@ -15,6 +15,7 @@ from .inspection import inspect_machine
 from .ssh import connect
 from .views import serialize_file_config, _store_remote_result, _stale_action_response
 from .rbac import require_method_permissions, require_permission
+from .audit import record_operation_audit
 
 
 @api_view(['GET', 'POST'])
@@ -25,7 +26,9 @@ def projects(request):
     if request.method == 'GET':
         return Response([project_payload(p) for p in Project.objects.select_related('parent')])
     try:
-        return Response(project_payload(save_project(request.data)), status=201)
+        result = save_project(request.data)
+        record_operation_audit(request, '项目管理', '新增', result.name, '创建项目')
+        return Response(project_payload(result), status=201)
     except IntegrityError:
         raise ValidationError('同级项目名称已存在')
 
@@ -38,12 +41,16 @@ def project_detail(request, project_id):
     node = get_object_or_404(Project, pk=project_id)
     if request.method == 'DELETE':
         try:
+            object_name = node.path
             node.delete()
+            record_operation_audit(request, '项目管理', '删除', object_name, '删除项目')
         except ProtectedError:
             return Response({'detail': '项目包含子项目或主机配置，请先移走后再删除'}, status=400)
         return Response(status=204)
     try:
-        return Response(project_payload(save_project(request.data, project_id)))
+        result = save_project(request.data, project_id)
+        record_operation_audit(request, '项目管理', '编辑', result.name, '更新项目')
+        return Response(project_payload(result))
     except IntegrityError:
         raise ValidationError('同级项目名称已存在')
 
@@ -81,6 +88,7 @@ def inspect_config(request, config_id):
             config.inspection_status, config.inspection_error = 'error', str(error)
         if not _store_remote_result(config, fields):
             return _stale_action_response(config)
+        record_operation_audit(request, '项目管理', '执行', config.host_name, '验证 SSH 并采集机器规格')
         return Response({'detail': 'SSH 验证成功' if config.inspection_error else '验证与规格采集成功', 'config': serialize_file_config(config)})
     finally:
         client.close()
@@ -122,4 +130,5 @@ def batch_configs(request):
                 config.save(update_fields=['project_node', 'project', 'revision', 'updated_at'])
                 config.remote_files.update(project=project.name)
             results.append({'id': item['id'], 'success': True})
+    record_operation_audit(request, '项目管理', '批量操作', '文件配置', f'批量{action} {len(items)} 条')
     return Response({'results': results})

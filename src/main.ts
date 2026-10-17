@@ -14,6 +14,8 @@ import FileLists from './views/FileLists.vue'
 import Projects from './views/Projects.vue'
 import RoleManagement from './views/RoleManagement.vue'
 import Forbidden from './views/Forbidden.vue'
+import FileAudit from './views/FileAudit.vue'
+import OperationAudit from './views/OperationAudit.vue'
 import { clearAuth } from './api'
 import { authUser, refreshAuth } from './composables/useAuth'
 import { canVisit, landingPage } from './features/access/model'
@@ -31,6 +33,8 @@ const router = createRouter({
     { path: '/file-configs', component: FileConfigs, meta: { title: '文件管理' } },
     { path: '/file-lists', component: FileLists, meta: { title: '文件列表' } },
     { path: '/projects', component: Projects, meta: { title: '项目管理' } },
+    { path: '/file-audits', component: FileAudit, meta: { title: '文件审计' } },
+    { path: '/operation-audits', component: OperationAudit, meta: { title: '操作审计' } },
     { path: '/:pathMatch(.*)*', component: ModulePage },
   ],
 })

@@ -12,6 +12,8 @@ describe('RBAC access model', () => {
     expect(canVisit(viewer, '/accounts')).toBe(false)
     expect(canVisit(viewer, '/users')).toBe(false)
     expect(canVisit(user([], true), '/roles')).toBe(true)
+    expect(canVisit(user(['file_audit.view']), '/file-audits')).toBe(true)
+    expect(canVisit(user(['file_audit.view']), '/operation-audits')).toBe(false)
   })
 
   it('selecting a write action includes view and removing view clears the module', () => {
