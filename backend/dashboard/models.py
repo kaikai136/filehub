@@ -64,6 +64,52 @@ class OperationAudit(models.Model):
         ]
 
 
+class ConfigNotification(models.Model):
+    EVENT_CHOICES = [
+        ("created", "新增"),
+        ("updated", "编辑"),
+        ("deleted", "删除"),
+    ]
+
+    event_type = models.CharField(max_length=20, choices=EVENT_CHOICES)
+    operator = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL,
+        related_name="config_notifications",
+    )
+    operator_name = models.CharField(max_length=255, blank=True, default="")
+    operator_username = models.CharField(max_length=150, blank=True, default="")
+    project_name = models.CharField(max_length=500, blank=True, default="")
+    host_name = models.CharField(max_length=150, blank=True, default="")
+    ip_address = models.GenericIPAddressField()
+    path = models.CharField(max_length=500, blank=True, default="")
+    previous_path = models.CharField(max_length=500, blank=True, default="")
+    file_config = models.ForeignKey(
+        "FileConfig", null=True, blank=True, on_delete=models.SET_NULL,
+        related_name="notifications",
+    )
+    file_audit = models.OneToOneField(
+        FileAudit, null=True, blank=True, on_delete=models.SET_NULL,
+        related_name="config_notification",
+    )
+    file_config_id_snapshot = models.BigIntegerField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at", "-id"]
+        indexes = [models.Index(fields=["-created_at"], name="config_notice_time_idx")]
+
+
+class ConfigNotificationRead(models.Model):
+    notification = models.ForeignKey(ConfigNotification, on_delete=models.CASCADE, related_name="reads")
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="config_notification_reads")
+    read_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=["notification", "user"], name="unique_config_notification_read"),
+        ]
+
+
 class SystemSetting(models.Model):
     """The single persisted set of console-wide preferences."""
     WATERMARK_MODES = [("username", "登录用户名"), ("custom", "自定义文字")]

@@ -16,6 +16,7 @@ from rest_framework import status
 
 from .models import Account, FileConfig, OperationAudit, Project, RemoteFile
 from .audit import record_file_audit, record_operation_audit
+from .notifications import config_snapshot, record_config_notification
 from .permissions import role_permissions
 from .rbac import require_any_permission, require_config_access, require_method_permissions, require_permission, require_superuser
 from .security import decrypt_value, encrypt_value
@@ -297,6 +298,7 @@ def file_configs(request):
                 file_path=path.strip(),
             )
         record_operation_audit(request, '文件管理', '新增', config.file_path, '创建文件管理配置')
+        record_config_notification(request, "created", config=config)
         return Response(serialize_file_config(config), status=status.HTTP_201_CREATED)
     required = ("host_name", "ip_address", "account_id")
     if any(not data.get(field) for field in required):
@@ -317,6 +319,7 @@ def file_configs(request):
     except (ValueError, TypeError) as error:
         return Response({"detail": str(error)}, status=status.HTTP_400_BAD_REQUEST)
     record_operation_audit(request, '项目管理', '新增', config.host_name, '创建项目主机配置')
+    record_config_notification(request, "created", config=config)
     return Response(serialize_file_config(config), status=status.HTTP_201_CREATED)
 
 
@@ -331,12 +334,14 @@ def file_config_detail(request, config_id):
         return Response({"detail": "文件管理配置不存在"}, status=status.HTTP_404_NOT_FOUND)
     if request.method == "DELETE":
         object_name = config.file_path or config.host_name
+        deleted_snapshot = config_snapshot(config)
         with transaction.atomic():
             current = FileConfig.objects.select_for_update().get(pk=config.pk)
             if 'revision' in request.data and request.data['revision'] != current.revision:
                 return Response({'detail': '此记录已更新，请刷新后重试'}, status=409)
             current.delete()
         record_operation_audit(request, '文件管理', '删除', object_name, '删除文件管理配置')
+        record_config_notification(request, "deleted", snapshot=deleted_snapshot)
         return Response(status=status.HTTP_204_NO_CONTENT)
     data = request.data
     if "revision" in data and data["revision"] != config.revision:
@@ -397,6 +402,7 @@ def file_config_detail(request, config_id):
         config.save(update_fields=fields)
     config.refresh_from_db()
     record_operation_audit(request, '文件管理', '编辑', config.file_path or config.host_name, '更新文件管理配置')
+    record_config_notification(request, "updated", config=config, previous_path=old_path)
     return Response(serialize_file_config(config))
 
 
@@ -550,7 +556,14 @@ def file_content(request, file_id):
         remote_file.size = attrs.st_size
         remote_file.modified_at = timezone.make_aware(datetime.fromtimestamp(attrs.st_mtime)) if attrs.st_mtime else None
         remote_file.save(update_fields=["size", "modified_at", "fetched_at"])
-        record_file_audit(request, remote_file, before, content)
+        file_audit = record_file_audit(request, remote_file, before, content)
+        if file_audit:
+            snapshot = config_snapshot(remote_file.file_config)
+            snapshot["path"] = file_audit.directory
+            record_config_notification(
+                request, "updated", config=remote_file.file_config,
+                snapshot=snapshot, file_audit=file_audit,
+            )
         record_operation_audit(request, '文件列表', '编辑', remote_file.relative_path, '保存远程文件内容')
         return Response({"detail": "文件保存成功", "file": serialize_remote_file(remote_file)})
     except Exception as error:

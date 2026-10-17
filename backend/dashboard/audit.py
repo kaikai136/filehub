@@ -41,9 +41,10 @@ def client_ip(request):
 def _safely_create(model, **values):
     try:
         with transaction.atomic():
-            model.objects.create(**values)
+            return model.objects.create(**values)
     except Exception:
         logger.exception('Failed to persist %s', model.__name__)
+        return None
 
 
 def record_operation_audit(request, module, action, object_name='', detail='', user=None):
@@ -63,9 +64,14 @@ def unified_diff(before, after, path):
     return '\n'.join(lines) + ('\n' if lines else '')
 
 
+def remote_file_path(remote_file):
+    config = remote_file.file_config
+    return remote_file.relative_path if remote_file.relative_path.startswith('/') else posixpath.join(config.file_path, remote_file.relative_path)
+
+
 def record_file_audit(request, remote_file, before, after):
     config = remote_file.file_config
-    path = remote_file.relative_path if remote_file.relative_path.startswith('/') else posixpath.join(config.file_path, remote_file.relative_path)
+    path = remote_file_path(remote_file)
     difference = unified_diff(before, after, path)
     if not difference:
         return None
@@ -80,5 +86,4 @@ def record_file_audit(request, remote_file, before, after):
         'file_config': config,
         'remote_file': remote_file,
     }
-    _safely_create(FileAudit, **values)
-    return difference
+    return _safely_create(FileAudit, **values)

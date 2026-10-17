@@ -3,6 +3,7 @@ from . import project_views, project_transfer
 from . import rbac_views
 from . import audit_views
 from . import settings_views
+from . import notification_views
 from .views import (
     dashboard,
     accounts,
@@ -24,6 +25,9 @@ from .views import (
 )
 
 urlpatterns = [
+    path('notifications/', notification_views.notifications),
+    path('notifications/read-all/', notification_views.mark_all_notifications_read),
+    path('notifications/<int:notification_id>/read/', notification_views.mark_notification_read),
     path('file-audits/', audit_views.file_audits),
     path('file-audits/<int:audit_id>/', audit_views.file_audit_detail),
     path('operation-audits/', audit_views.operation_audits),

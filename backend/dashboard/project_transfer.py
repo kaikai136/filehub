@@ -14,6 +14,7 @@ from .models import Account, FileConfig, Project
 from .projects import validate_config
 from .rbac import require_permission
 from .audit import record_operation_audit
+from .notifications import record_config_notification
 
 IMPORT_COLUMNS = [('项目完整路径', 'project_path'), ('节点名称', 'host_name'), ('IP地址', 'ip_address'),
                   ('端口', 'port'), ('账号名称', 'account_name')]
@@ -152,16 +153,19 @@ def import_configs(request):
         rows = validate_rows(payload['rows'])
         if any(row['status'] == 'error' for row in rows):
             return Response({'detail': '数据已变化，请重新校验', 'rows': rows}, status=400)
-        created = 0
+        created_configs = []
         for row in rows:
             if row['status'] == 'duplicate':
                 continue
             parent = None
             for name in row['project_path'].split('/'):
                 parent, _ = Project.objects.get_or_create(parent=parent, name=name)
-            FileConfig.objects.create(project_node=parent, project=parent.name,
+            config = FileConfig.objects.create(project_node=parent, project=parent.name,
                 **{key: row[key] for key in ('host_name', 'ip_address', 'port', 'account_id')},
                 machine_name='', file_path='')
-            created += 1
+            created_configs.append(config)
+        created = len(created_configs)
     record_operation_audit(request, '项目管理', '导入', '主机配置', f'导入 {created} 条，跳过 {len(rows) - created} 条')
+    for config in created_configs:
+        record_config_notification(request, 'created', config=config)
     return Response({'created': created, 'skipped': len(rows) - created})

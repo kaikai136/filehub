@@ -16,6 +16,7 @@ from .ssh import connect
 from .views import serialize_file_config, _store_remote_result, _stale_action_response
 from .rbac import require_method_permissions, require_permission
 from .audit import record_operation_audit
+from .notifications import config_snapshot, record_config_notification
 
 
 @api_view(['GET', 'POST'])
@@ -113,6 +114,7 @@ def batch_configs(request):
     else:
         project = None
     results = []
+    notification_events = []
     for item in items:
         if not isinstance(item, dict) or not isinstance(item.get('id'), int) or not isinstance(item.get('revision'), int):
             raise ValidationError('主机 ID 与版本不能为空')
@@ -123,12 +125,17 @@ def batch_configs(request):
                 results.append({'id': item['id'], 'success': False, 'error': '记录不存在或已更新，请刷新'})
                 continue
             if action == 'delete':
+                snapshot = config_snapshot(config)
                 config.delete()
+                notification_events.append(('deleted', None, snapshot))
             else:
                 config.project_node, config.project = project, project.name
                 config.revision += 1
                 config.save(update_fields=['project_node', 'project', 'revision', 'updated_at'])
                 config.remote_files.update(project=project.name)
+                notification_events.append(('updated', config, None))
             results.append({'id': item['id'], 'success': True})
     record_operation_audit(request, '项目管理', '批量操作', '文件配置', f'批量{action} {len(items)} 条')
+    for event_type, config, snapshot in notification_events:
+        record_config_notification(request, event_type, config=config, snapshot=snapshot)
     return Response({'results': results})

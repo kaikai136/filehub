@@ -73,3 +73,26 @@ export interface SettingsResponse {
   settings: SystemSettings
   user: User
 }
+
+export interface ConfigNotification {
+  id: number
+  event_type: 'created' | 'updated' | 'deleted'
+  operator: string
+  operator_username: string
+  occurred_at: string
+  project: string
+  host_name: string
+  ip_address: string
+  path: string
+  previous_path: string
+  file_config_id: number | null
+  file_config_id_snapshot: number | null
+  message: string
+  is_read: boolean
+}
+
+export interface NotificationResponse {
+  items: ConfigNotification[]
+  unread_count: number
+  latest: ConfigNotification | null
+}

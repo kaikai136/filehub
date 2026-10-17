@@ -9,7 +9,7 @@ from django.db import connection
 from django.utils import timezone
 from rest_framework.test import APITestCase
 
-from .models import Account, FileAudit, FileConfig, OperationAudit, Project, RemoteFile, Role
+from .models import Account, ConfigNotification, FileAudit, FileConfig, OperationAudit, Project, RemoteFile, Role
 
 
 User = get_user_model()
@@ -44,6 +44,11 @@ class AuditTests(APITestCase):
         self.assertIn('-port: 80', audit.diff)
         self.assertIn('+port: 8080', audit.diff)
         self.assertEqual(audit.operator_username, self.admin.username)
+        notification = ConfigNotification.objects.get(file_audit=audit)
+        self.assertEqual(notification.event_type, 'updated')
+        self.assertEqual(notification.host_name, 'node')
+        self.assertEqual(notification.ip_address, '192.0.2.10')
+        self.assertEqual(notification.path, '/etc/app/conf/app.yml')
         operation = OperationAudit.objects.get(module='文件列表')
         self.assertEqual((operation.action, operation.ip_address), ('编辑', '198.51.100.20'))
 
@@ -54,6 +59,7 @@ class AuditTests(APITestCase):
         response = self.client.patch(f'/api/file-lists/{self.remote_file.id}/', {'content': 'same\n'}, format='json')
         self.assertEqual(response.status_code, 200)
         self.assertFalse(FileAudit.objects.exists())
+        self.assertFalse(ConfigNotification.objects.exists())
 
     def test_audit_lists_filter_order_and_paginate(self):
         older = FileAudit.objects.create(
