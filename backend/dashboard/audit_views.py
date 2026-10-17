@@ -11,6 +11,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from .models import FileAudit, OperationAudit
+from .audit import purge_expired_audits
 from .rbac import require_permission
 
 
@@ -81,6 +82,7 @@ def serialize_operation_audit(record):
 @permission_classes([IsAuthenticated])
 @require_permission('file_audit.view')
 def file_audits(request):
+    purge_expired_audits()
     queryset = FileAudit.objects.select_related('operator')
     queryset = _date_filter(request, queryset, 'changed_at')
     for parameter, field in [('project', 'project_name'), ('ip', 'ip_address'), ('directory', 'directory')]:
@@ -113,6 +115,7 @@ def file_audit_detail(request, audit_id):
 @permission_classes([IsAuthenticated])
 @require_permission('operation_audit.view')
 def operation_audits(request):
+    purge_expired_audits()
     queryset = OperationAudit.objects.select_related('operator')
     queryset = _date_filter(request, queryset, 'occurred_at')
     for parameter, field in [('module', 'module'), ('action', 'action'), ('ip', 'ip_address')]:

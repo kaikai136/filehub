@@ -10,6 +10,7 @@ describe('RBAC access model', () => {
     const viewer = user(['projects.view'])
     expect(canVisit(viewer, '/projects')).toBe(true)
     expect(canVisit(viewer, '/accounts')).toBe(false)
+    expect(canVisit(viewer, '/profile')).toBe(false)
     expect(canVisit(viewer, '/users')).toBe(false)
     expect(canVisit(user([], true), '/roles')).toBe(true)
     expect(canVisit(user(['file_audit.view']), '/file-audits')).toBe(true)

@@ -54,3 +54,22 @@ export interface DashboardData {
   resources: { key: string; label: string; count: number; description: string; path: string }[]
   activity: { id: number; title: string; detail: string; operator: string; occurred_at: string; type: string }[]
 }
+
+export interface SystemSettings {
+  font_size: 14 | 16 | 18
+  watermark_enabled: boolean
+  watermark_mode: 'username' | 'custom'
+  watermark_text: string
+  watermark_content?: string
+  watermark_opacity: number
+  watermark_rotation: number
+  file_audit_retention_days: number
+  operation_audit_retention_days: number
+  can_edit_global: boolean
+  updated_at: string
+}
+
+export interface SettingsResponse {
+  settings: SystemSettings
+  user: User
+}

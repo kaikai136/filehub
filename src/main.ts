@@ -16,8 +16,10 @@ import RoleManagement from './views/RoleManagement.vue'
 import Forbidden from './views/Forbidden.vue'
 import FileAudit from './views/FileAudit.vue'
 import OperationAudit from './views/OperationAudit.vue'
+import Settings from './views/Settings.vue'
 import { clearAuth } from './api'
 import { authUser, refreshAuth } from './composables/useAuth'
+import { refreshSettings } from './composables/useSettings'
 import { canVisit, landingPage } from './features/access/model'
 import './style.css'
 
@@ -35,6 +37,7 @@ const router = createRouter({
     { path: '/projects', component: Projects, meta: { title: '项目管理' } },
     { path: '/file-audits', component: FileAudit, meta: { title: '文件审计' } },
     { path: '/operation-audits', component: OperationAudit, meta: { title: '操作审计' } },
+    { path: '/settings', component: Settings, meta: { title: '系统设置' } },
     { path: '/:pathMatch(.*)*', component: ModulePage },
   ],
 })
@@ -44,6 +47,7 @@ router.beforeEach(async (to) => {
   if (to.path !== '/login' && !token) return '/login'
   if (!token) return true
   try { await refreshAuth() } catch { authUser.value = null; clearAuth(); return to.path === '/login' ? true : '/login' }
+  try { await refreshSettings() } catch { /* appearance should not block navigation */ }
   if (to.path === '/login') return landingPage(authUser.value)
   if (to.path === '/' && !canVisit(authUser.value, '/')) return landingPage(authUser.value)
   if (!canVisit(authUser.value, to.path)) return '/forbidden'

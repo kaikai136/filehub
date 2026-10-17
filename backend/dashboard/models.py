@@ -64,6 +64,25 @@ class OperationAudit(models.Model):
         ]
 
 
+class SystemSetting(models.Model):
+    """The single persisted set of console-wide preferences."""
+    WATERMARK_MODES = [("username", "登录用户名"), ("custom", "自定义文字")]
+
+    font_size = models.PositiveSmallIntegerField(default=16)
+    watermark_enabled = models.BooleanField(default=False)
+    watermark_mode = models.CharField(max_length=20, choices=WATERMARK_MODES, default="username")
+    watermark_text = models.CharField(max_length=120, default="FileHub", blank=True)
+    watermark_opacity = models.PositiveSmallIntegerField(default=12)
+    watermark_rotation = models.SmallIntegerField(default=-20)
+    file_audit_retention_days = models.PositiveIntegerField(default=180)
+    operation_audit_retention_days = models.PositiveIntegerField(default=180)
+    updated_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name="updated_system_settings")
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "系统设置"
+
+
 class Account(models.Model):
     name = models.CharField(max_length=100, verbose_name="账号名称")
     username = models.CharField(max_length=150, verbose_name="用户")

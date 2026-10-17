@@ -149,6 +149,17 @@ def logout(request):
     return Response({"detail": "已退出登录"})
 
 
+@api_view(["POST"])
+@authentication_classes([TokenAuthentication])
+@permission_classes([IsAuthenticated])
+def unlock(request):
+    password = str(request.data.get("password", ""))
+    if not password or not request.user.check_password(password):
+        return Response({"detail": "密码不正确"}, status=status.HTTP_400_BAD_REQUEST)
+    record_operation_audit(request, '认证', '解锁屏幕', request.user.username, '屏幕解锁成功')
+    return Response({"detail": "已解锁"})
+
+
 @api_view(["GET"])
 @authentication_classes([TokenAuthentication])
 @permission_classes([IsAuthenticated])

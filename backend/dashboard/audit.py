@@ -1,13 +1,27 @@
 import difflib
 import logging
 import posixpath
+from datetime import timedelta
 
 from django.db import transaction
+from django.utils import timezone
 
-from .models import FileAudit, OperationAudit
+from .models import FileAudit, OperationAudit, SystemSetting
 
 
 logger = logging.getLogger(__name__)
+
+
+def purge_expired_audits(now=None):
+    setting, _ = SystemSetting.objects.get_or_create(pk=1)
+    current_time = now or timezone.now()
+    file_deleted, _ = FileAudit.objects.filter(
+        changed_at__lt=current_time - timedelta(days=setting.file_audit_retention_days),
+    ).delete()
+    operation_deleted, _ = OperationAudit.objects.filter(
+        occurred_at__lt=current_time - timedelta(days=setting.operation_audit_retention_days),
+    ).delete()
+    return {"file_audits": file_deleted, "operation_audits": operation_deleted}
 
 
 def _operator_values(user):
