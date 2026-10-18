@@ -18,7 +18,7 @@ from .models import Account, FileConfig, OperationAudit, Project, RemoteFile, Us
 from .audit import record_file_audit, record_operation_audit
 from .notifications import config_snapshot, record_config_notification
 from .permissions import role_permissions
-from .rbac import require_any_permission, require_config_access, require_method_permissions, require_permission, require_superuser
+from .rbac import require_any_permission, require_config_access, require_method_permissions, require_permission
 from .security import decrypt_value, encrypt_value
 from .ssh import connect, list_remote_files, read_remote_file, test_connection, write_remote_file
 from .projects import resolve_project, validate_config
@@ -161,7 +161,7 @@ def me(request):
 @api_view(["GET", "POST"])
 @authentication_classes([TokenAuthentication])
 @permission_classes([IsAuthenticated])
-@require_superuser
+@require_method_permissions({"GET": "users.view", "POST": "users.create"})
 def users(request):
     from .user_management import list_or_create_users
     return list_or_create_users(request)
@@ -170,7 +170,7 @@ def users(request):
 @api_view(["PATCH", "DELETE"])
 @authentication_classes([TokenAuthentication])
 @permission_classes([IsAuthenticated])
-@require_superuser
+@require_method_permissions({"PATCH": "users.edit", "DELETE": "users.delete"})
 def user_detail(request, user_id):
     from .user_management import update_or_delete_user
     return update_or_delete_user(request, user_id)

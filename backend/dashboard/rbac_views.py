@@ -9,8 +9,8 @@ from rest_framework.response import Response
 from rest_framework import status
 
 from .models import Role
-from .permissions import ALL_PERMISSIONS, PERMISSION_CATALOG, normalize_permissions
-from .rbac import require_superuser
+from .permissions import ALL_PERMISSIONS, PERMISSION_CATALOG, can_assign_permissions, normalize_permissions
+from .rbac import require_method_permissions, require_permission
 from .audit import record_operation_audit
 
 
@@ -52,7 +52,7 @@ def validate_role(data, current=None):
 @api_view(["GET"])
 @authentication_classes([TokenAuthentication])
 @permission_classes([IsAuthenticated])
-@require_superuser
+@require_permission("roles.view")
 def permission_catalog(request):
     return Response(PERMISSION_CATALOG)
 
@@ -60,13 +60,15 @@ def permission_catalog(request):
 @api_view(["GET", "POST"])
 @authentication_classes([TokenAuthentication])
 @permission_classes([IsAuthenticated])
-@require_superuser
+@require_method_permissions({"GET": ("roles.view", "users.view"), "POST": "roles.create"})
 def roles(request):
     if request.method == "GET":
         return Response([serialize_role(role) for role in Role.objects.prefetch_related("users")])
     values, error = validate_role(request.data)
     if error:
         return Response({"detail": error}, status=status.HTTP_400_BAD_REQUEST)
+    if not can_assign_permissions(request.user, values["permissions"]):
+        return Response({"detail": "不能分配当前账号没有的权限"}, status=status.HTTP_403_FORBIDDEN)
     try:
         with transaction.atomic():
             role = Role.objects.create(**values, is_active=bool(request.data.get("is_active", True)))
@@ -79,12 +81,14 @@ def roles(request):
 @api_view(["PATCH", "DELETE"])
 @authentication_classes([TokenAuthentication])
 @permission_classes([IsAuthenticated])
-@require_superuser
+@require_method_permissions({"PATCH": "roles.edit", "DELETE": "roles.delete"})
 @transaction.atomic
 def role_detail(request, role_id):
     role = get_object_or_404(Role.objects.select_for_update(), pk=role_id)
     if role.is_builtin:
         return Response({"detail": "内置角色不可修改、停用或删除"}, status=status.HTTP_400_BAD_REQUEST)
+    if not can_assign_permissions(request.user, normalize_permissions(role.permissions)):
+        return Response({"detail": "不能管理权限高于当前账号的角色"}, status=status.HTTP_403_FORBIDDEN)
     if request.method == "DELETE":
         if role.users.exists():
             return Response({"detail": "角色仍有关联用户，不能删除"}, status=status.HTTP_400_BAD_REQUEST)
@@ -97,6 +101,8 @@ def role_detail(request, role_id):
     values, error = validate_role(request.data, role)
     if error:
         return Response({"detail": error}, status=status.HTTP_400_BAD_REQUEST)
+    if not can_assign_permissions(request.user, values["permissions"]):
+        return Response({"detail": "不能分配当前账号没有的权限"}, status=status.HTTP_403_FORBIDDEN)
     try:
         with transaction.atomic():
             locked = Role.objects.select_for_update().get(pk=role.pk)
@@ -116,7 +122,7 @@ def role_detail(request, role_id):
 @api_view(["GET"])
 @authentication_classes([TokenAuthentication])
 @permission_classes([IsAuthenticated])
-@require_superuser
+@require_permission("roles.view")
 def role_users(request, role_id):
     role = get_object_or_404(Role, pk=role_id)
     return Response([{

@@ -21,6 +21,7 @@ from rest_framework.throttling import AnonRateThrottle
 from .audit import record_operation_audit
 from .authentication import ExpiryTokenAuthentication
 from .models import AuthChallenge, LoginSession, UserTwoFactor
+from .permissions import has_permission, role_permissions
 from .security import decrypt_value, encrypt_value
 from .settings_views import get_system_setting
 from .views import ensure_development_admin, serialize_user
@@ -228,12 +229,16 @@ def verify_setup(request):
 
 
 def manage_two_factor(request, user_id, action):
-    if not request.user.is_superuser:
-        return Response({"detail": "仅超级管理员可以执行此操作"}, status=403)
+    if not has_permission(request.user, "users.edit"):
+        return Response({"detail": "没有执行此操作的权限"}, status=403)
     with transaction.atomic():
         user = get_user_model().objects.select_for_update().filter(pk=user_id).first()
         if not user:
             return Response({"detail": "用户不存在"}, status=404)
+        if user.is_superuser and not request.user.is_superuser:
+            return Response({"detail": "不能管理超级管理员"}, status=403)
+        if not request.user.is_superuser and not role_permissions(user).issubset(role_permissions(request.user)):
+            return Response({"detail": "不能管理权限高于当前账号的用户"}, status=403)
         if user.username == "admin" or user.pk == request.user.pk:
             return Response({"detail": "内置管理员或当前登录用户不允许在用户列表中操作 2FA"}, status=400)
         record, _ = UserTwoFactor.objects.get_or_create(user=user)

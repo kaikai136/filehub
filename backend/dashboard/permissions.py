@@ -4,12 +4,12 @@ PERMISSION_GROUPS = [
     {"key": "accounts", "label": "SSH 账号", "permissions": [("view", "查看"), ("create", "新增"), ("edit", "编辑"), ("delete", "删除")]},
     {"key": "file_configs", "label": "文件管理", "permissions": [("view", "查看"), ("create", "新增"), ("edit", "编辑"), ("delete", "删除"), ("execute", "执行")]},
     {"key": "file_lists", "label": "文件列表", "permissions": [("view", "查看"), ("edit", "编辑")]},
-    {"key": "monitor", "label": "监控", "permissions": [("view", "查看")]},
-    {"key": "tasks", "label": "计划任务", "permissions": [("view", "查看")]},
     {"key": "file_audit", "label": "文件审计", "permissions": [("view", "查看")]},
     {"key": "operation_audit", "label": "操作审计", "permissions": [("view", "查看")]},
     {"key": "command_execution", "label": "命令执行", "permissions": [("view", "查看"), ("execute", "执行")]},
     {"key": "settings", "label": "设置", "permissions": [("view", "查看")]},
+    {"key": "users", "label": "用户管理", "permissions": [("view", "查看"), ("create", "新增"), ("edit", "编辑"), ("delete", "删除")]},
+    {"key": "roles", "label": "角色管理", "permissions": [("view", "查看"), ("create", "新增"), ("edit", "编辑"), ("delete", "删除")]},
 ]
 
 PERMISSION_CATALOG = [
@@ -45,3 +45,9 @@ def has_permission(user, permission):
 def has_any_permission(user, *permissions):
     effective = role_permissions(user)
     return bool(effective.intersection(permissions))
+
+
+def can_assign_permissions(user, permissions):
+    if user.is_superuser:
+        return True
+    return set(permissions).issubset(role_permissions(user))

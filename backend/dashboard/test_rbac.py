@@ -39,6 +39,16 @@ class RbacTests(APITestCase):
         self.assertEqual(set(self.administrator.permissions), ALL_PERMISSIONS)
         self.assertEqual(set(self.viewer.permissions), READ_PERMISSIONS)
 
+    def test_permission_catalog_contains_managed_resources_only(self):
+        self.authenticate(self.admin)
+        response = self.client.get('/api/permissions/')
+        self.assertEqual(response.status_code, 200)
+        keys = {item['key'] for item in response.data}
+        self.assertIn('users.create', keys)
+        self.assertIn('roles.delete', keys)
+        self.assertNotIn('monitor.view', keys)
+        self.assertNotIn('tasks.view', keys)
+
     def test_role_code_uniqueness_format_catalog_validation_and_immutability(self):
         self.authenticate(self.admin)
         invalid = self.client.post('/api/roles/', {'name': '无效', 'code': 'Bad-Code', 'permissions': []}, format='json')
@@ -64,11 +74,39 @@ class RbacTests(APITestCase):
         self.user.roles.remove(custom)
         self.assertEqual(self.client.delete(f'/api/roles/{custom.id}/').status_code, 204)
 
-    def test_role_and_user_management_require_superuser(self):
-        self.user.roles.add(self.administrator)
+    def test_role_and_user_management_follow_delegated_permissions(self):
+        manager_role = Role.objects.create(name='用户角色管理员', code='user_role_manager', permissions=[
+            'users.view', 'users.create', 'users.edit', 'users.delete',
+            'roles.view', 'roles.create', 'roles.edit', 'roles.delete',
+        ])
+        self.user.roles.add(manager_role)
         self.authenticate(self.user)
         for path in ('/api/roles/', '/api/permissions/', '/api/users/'):
-            self.assertEqual(self.client.get(path).status_code, 403)
+            self.assertEqual(self.client.get(path).status_code, 200)
+        self.assertEqual(self.client.post('/api/roles/', {
+            'name': '越权角色', 'code': 'elevated_role', 'permissions': ['projects.delete'],
+        }, format='json').status_code, 403)
+        self.assertEqual(self.client.post('/api/users/', {
+            'username': 'managed', 'name': '受管用户', 'password': 'secret123', 'role_ids': [self.viewer.id],
+        }, format='json').status_code, 403)
+
+    def test_user_manager_can_read_roles_without_role_management_permission(self):
+        manager_role = Role.objects.create(name='用户查看员', code='user_reader', permissions=['users.view'])
+        self.user.roles.add(manager_role)
+        self.authenticate(self.user)
+        self.assertEqual(self.client.get('/api/users/').status_code, 200)
+        self.assertEqual(self.client.get('/api/roles/').status_code, 200)
+        self.assertEqual(self.client.get('/api/permissions/').status_code, 403)
+
+    def test_non_superuser_cannot_manage_higher_privilege_targets(self):
+        manager_role = Role.objects.create(name='有限管理员', code='limited_manager', permissions=['users.view', 'users.edit', 'roles.view', 'roles.edit'])
+        high_role = Role.objects.create(name='高权限角色', code='high_role', permissions=['projects.delete'])
+        self.user.roles.add(manager_role)
+        target = User.objects.create_user('high-user', password='secret123')
+        target.roles.add(high_role)
+        self.authenticate(self.user)
+        self.assertEqual(self.client.patch(f'/api/users/{target.id}/', {'name': 'blocked'}, format='json').status_code, 403)
+        self.assertEqual(self.client.patch(f'/api/roles/{high_role.id}/', {'name': 'blocked'}, format='json').status_code, 403)
 
     def test_user_role_assignment_and_me_response(self):
         self.authenticate(self.admin)

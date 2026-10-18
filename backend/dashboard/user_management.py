@@ -3,11 +3,12 @@ from django.contrib.auth.validators import UnicodeUsernameValidator
 from django.db import IntegrityError, transaction
 from rest_framework import serializers
 from rest_framework.authtoken.models import Token
-from rest_framework.exceptions import ValidationError
+from rest_framework.exceptions import PermissionDenied, ValidationError
 from rest_framework.response import Response
 
 from .models import Role
 from .audit import record_operation_audit
+from .permissions import normalize_permissions, role_permissions
 
 UserModel = get_user_model()
 
@@ -44,7 +45,7 @@ def validated_payload(request, user=None):
     return data
 
 
-def selected_roles(data, user=None):
+def selected_roles(data, user=None, actor=None):
     if 'role_ids' not in data:
         return None
     ids = set(data['role_ids'])
@@ -54,6 +55,10 @@ def selected_roles(data, user=None):
     existing = set(user.roles.values_list('id', flat=True)) if user else set()
     if any(not role.is_active and role.pk not in existing for role in roles):
         raise ValidationError({'detail': '不能分配已禁用的角色'})
+    if actor and not actor.is_superuser:
+        effective = role_permissions(actor)
+        if any(not set(normalize_permissions(role.permissions)).issubset(effective) for role in roles):
+            raise PermissionDenied('不能分配当前账号没有的权限')
     return roles
 
 
@@ -64,7 +69,7 @@ def list_or_create_users(request):
     data = validated_payload(request)
     try:
         with transaction.atomic():
-            roles = selected_roles(data)
+            roles = selected_roles(data, actor=request.user)
             user = UserModel.objects.create_user(username=data['username'], first_name=data['name'], email=data.get('email', ''), password=data['password'], is_active=data.get('is_active', True))
             user.roles.set(roles)
     except IntegrityError:
@@ -82,6 +87,10 @@ def update_or_delete_user(request, user_id):
     user = next((item for item in users if item.pk == user_id), None)
     if user is None:
         return Response({'detail': '用户不存在'}, status=404)
+    if user.is_superuser and not request.user.is_superuser:
+        raise PermissionDenied('不能管理超级管理员')
+    if not request.user.is_superuser and not role_permissions(user).issubset(role_permissions(request.user)):
+        raise PermissionDenied('不能管理权限高于当前账号的用户')
     data = validated_payload(request, user) if request.method != 'DELETE' else {}
     destructive = request.method == 'DELETE' or data.get('is_active') is False
     if destructive and user.pk == request.user.pk:
@@ -93,7 +102,7 @@ def update_or_delete_user(request, user_id):
         user.delete()
         record_operation_audit(request, '用户管理', '删除', object_name, '删除用户')
         return Response(status=204)
-    roles = selected_roles(data, user)
+    roles = selected_roles(data, user, request.user)
     for key, attribute in [('name', 'first_name'), ('email', 'email'), ('is_active', 'is_active')]:
         if key in data:
             setattr(user, attribute, data[key])

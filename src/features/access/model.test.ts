@@ -6,13 +6,15 @@ const user = (permissions: string[] = [], is_superuser = false): SessionUser => 
 })
 
 describe('RBAC access model', () => {
-  it('filters routes by effective permission and reserves system pages for superusers', () => {
+  it('filters routes by effective permission, including delegated system pages', () => {
     const viewer = user(['projects.view'])
     expect(canVisit(viewer, '/projects')).toBe(true)
     expect(canVisit(viewer, '/accounts')).toBe(false)
     expect(canVisit(viewer, '/profile')).toBe(false)
     expect(canVisit(viewer, '/users')).toBe(false)
     expect(canVisit(user([], true), '/roles')).toBe(true)
+    expect(canVisit(user(['users.view']), '/users')).toBe(true)
+    expect(canVisit(user(['roles.view']), '/roles')).toBe(true)
     expect(canVisit(user(['file_audit.view']), '/file-audits')).toBe(true)
     expect(canVisit(user(['file_audit.view']), '/operation-audits')).toBe(false)
     expect(canVisit(user(['command_execution.view']), '/command-executions')).toBe(true)
@@ -25,6 +27,7 @@ describe('RBAC access model', () => {
 
   it('uses the first available page and falls back to forbidden', () => {
     expect(landingPage(user(['accounts.view']))).toBe('/accounts')
+    expect(landingPage(user(['users.view']))).toBe('/users')
     expect(landingPage(user())).toBe('/forbidden')
   })
 })

@@ -329,11 +329,18 @@ a { color: inherit; text-decoration: none; }
 .admin-actions { display: flex; align-items: center; gap: 2px; }
 .admin-actions .el-button { padding: 7px; }
 .admin-actions .el-button + .el-button { margin-left: 0; }
-.permission-matrix { width: 100%; border: 1px solid #e8ebf0; border-radius: 6px; overflow: hidden; }
-.permission-group { display: grid; grid-template-columns: 110px minmax(0, 1fr); gap: 12px; padding: 10px 14px; border-bottom: 1px solid #edf0f4; }
-.permission-group:last-child { border-bottom: 0; }
-.permission-group strong { font-weight: 500; color: #52677f; }
-.permission-group .el-checkbox { margin-right: 16px; }
+.permission-matrix { width: 100%; overflow-x: auto; border: 1px solid #e8ebf0; border-radius: 6px; }
+.permission-matrix-row { display: grid; grid-template-columns: minmax(140px, 1.6fr) repeat(7, minmax(64px, .7fr)); min-width: 680px; border-bottom: 1px solid #edf0f4; }
+.permission-matrix-row:last-child { border-bottom: 0; }
+.permission-matrix-row > * { display: flex; align-items: center; justify-content: center; min-height: 44px; padding: 8px; border-right: 1px solid #edf0f4; }
+.permission-matrix-row > *:last-child { border-right: 0; }
+.permission-matrix-header { color: #778496; background: #fafbfd; font-size: 12px; }
+.permission-matrix-header strong { justify-content: flex-start; color: #52677f; font-weight: 600; }
+.permission-module { justify-content: flex-start; }
+.permission-module .el-checkbox { margin-right: 0; }
+.permission-cell .el-checkbox { width: 18px; height: 18px; margin-right: 0; }
+.permission-cell .el-checkbox__label { display: none; }
+.permission-empty { color: #c1c8d1; }
 .config-table { overflow-x: auto; }
 .config-header, .config-row { min-width: 920px; display: grid; align-items: center; gap: 12px; padding: 0 16px; }
 .config-header { min-height: 40px; border-bottom: 1px solid #edf0f4; color: #8e98a5; font-size: 12px; background: #fafbfd; }
