@@ -16,6 +16,7 @@
             <div class="settings-section-heading"><div><h2>界面偏好</h2><p>调整 FileHub 控制台的基础显示方式。</p></div></div>
             <el-form label-position="top" class="settings-form">
               <el-form-item label="系统字体大小"><el-radio-group v-model="form.settings.font_size" :disabled="!canEditGlobal"><el-radio-button :value="14">小</el-radio-button><el-radio-button :value="16">标准</el-radio-button><el-radio-button :value="18">大</el-radio-button></el-radio-group><small>修改后立即应用到当前页面。</small></el-form-item>
+              <el-form-item label="GitHub 地址"><el-input v-model="form.settings.github_url" :disabled="!canEditGlobal" maxlength="500" placeholder="https://github.com/your-org/your-repository" clearable /><small>顶部 GitHub 图标点击后打开此地址，仅支持 HTTP 或 HTTPS。</small></el-form-item>
               <h3>登录会话</h3>
               <el-form-item label="系统登录过期时间">
                 <div class="expiry-controls"><el-input-number v-model="expiryValue" :min="1" :max="Math.floor(43200 / expiryFactors[expiryUnit])" :precision="0" :disabled="!canEditGlobal" /><el-select v-model="expiryUnit" style="width: 100px" :disabled="!canEditGlobal"><el-option value="minutes" label="分钟" /><el-option value="hours" label="小时" /><el-option value="days" label="天" /></el-select></div>
@@ -71,7 +72,7 @@ const activeSection = ref('interface')
 const expiryValue = ref<number | undefined>(8)
 const expiryUnit = ref<ExpiryUnit>('hours')
 const navItems = [{ key: 'interface', label: '界面偏好', icon: Monitor }, { key: 'profile', label: '用户信息', icon: User }, { key: 'watermark', label: '水印设置', icon: Edit }, { key: 'retention', label: '审计与日志', icon: Document }]
-const emptySettings: SystemSettings = { login_expiry_minutes: 480, font_size: 16, watermark_enabled: false, watermark_mode: 'username', watermark_text: 'FileHub', watermark_opacity: 12, watermark_rotation: -20, file_audit_retention_days: 180, operation_audit_retention_days: 180, can_edit_global: false, updated_at: '' }
+const emptySettings: SystemSettings = { login_expiry_minutes: 480, github_url: 'https://github.com/', font_size: 16, watermark_enabled: false, watermark_mode: 'username', watermark_text: 'FileHub', watermark_opacity: 12, watermark_rotation: -20, file_audit_retention_days: 180, operation_audit_retention_days: 180, can_edit_global: false, updated_at: '' }
 const form = reactive({ settings: { ...emptySettings }, user: createProfileForm() })
 const canEditGlobal = computed(() => form.settings.can_edit_global)
 const watermarkStyle = computed(() => ({ opacity: form.settings.watermark_opacity / 100, transform: `rotate(${form.settings.watermark_rotation}deg)` }))

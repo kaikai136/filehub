@@ -1,3 +1,5 @@
+from urllib.parse import urlparse
+
 from django.contrib.auth import update_session_auth_hash
 from django.db import transaction
 from .authentication import ExpiryTokenAuthentication as TokenAuthentication
@@ -32,6 +34,7 @@ def serialize_settings(setting, is_superuser=False):
         "file_audit_retention_days": setting.file_audit_retention_days,
         "operation_audit_retention_days": setting.operation_audit_retention_days,
         "login_expiry_minutes": setting.login_expiry_minutes,
+        "github_url": setting.github_url,
         "can_edit_global": is_superuser,
         "updated_at": setting.updated_at.isoformat(),
     }
@@ -89,6 +92,7 @@ def appearance(request):
         "watermark_content": request.user.username if setting.watermark_mode == "username" else setting.watermark_text,
         "watermark_opacity": setting.watermark_opacity,
         "watermark_rotation": setting.watermark_rotation,
+        "github_url": setting.github_url,
     })
 
 
@@ -145,6 +149,12 @@ def settings(request):
             if mode not in WATERMARK_MODES:
                 return Response({"detail": "水印模式无效"}, status=status.HTTP_400_BAD_REQUEST)
             values["watermark_mode"] = mode
+        if "github_url" in global_data:
+            github_url = str(global_data["github_url"]).strip()
+            parsed = urlparse(github_url)
+            if len(github_url) > 500 or parsed.scheme not in {"http", "https"} or not parsed.netloc:
+                return Response({"detail": "GitHub 地址必须是有效的 HTTP 或 HTTPS 地址"}, status=status.HTTP_400_BAD_REQUEST)
+            values["github_url"] = github_url
         effective_mode = values.get("watermark_mode", setting.watermark_mode)
         effective_text = values.get("watermark_text", setting.watermark_text)
         if effective_mode == "custom" and not effective_text:

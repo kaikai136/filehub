@@ -68,6 +68,7 @@ export interface DashboardData {
 
 export interface SystemSettings {
   login_expiry_minutes: number
+  github_url: string
   font_size: 14 | 16 | 18
   watermark_enabled: boolean
   watermark_mode: 'username' | 'custom'

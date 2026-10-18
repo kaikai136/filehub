@@ -20,6 +20,7 @@ class SystemSettingsTests(APITestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data["settings"]["font_size"], 16)
+        self.assertEqual(response.data["settings"]["github_url"], "https://github.com/")
         self.assertTrue(response.data["settings"]["can_edit_global"])
         self.assertEqual(response.data["user"]["username"], "settings-admin")
         self.assertTrue(SystemSetting.objects.filter(pk=1).exists())
@@ -30,6 +31,7 @@ class SystemSettingsTests(APITestCase):
                 "font_size": 18, "watermark_enabled": True, "watermark_mode": "custom", "watermark_text": "内部环境",
                 "watermark_opacity": 20, "watermark_rotation": -15,
                 "file_audit_retention_days": 365, "operation_audit_retention_days": 90,
+                "github_url": "https://github.com/example/filehub",
             },
             "user": {"username": "settings-admin", "name": "系统管理员", "email": "admin@example.com"},
         }, format="json")
@@ -37,6 +39,7 @@ class SystemSettingsTests(APITestCase):
         self.assertEqual(response.status_code, 200)
         setting = SystemSetting.objects.get(pk=1)
         self.assertEqual((setting.font_size, setting.watermark_mode, setting.watermark_text, setting.file_audit_retention_days), (18, "custom", "内部环境", 365))
+        self.assertEqual(setting.github_url, "https://github.com/example/filehub")
         self.admin.refresh_from_db()
         self.assertEqual((self.admin.first_name, self.admin.email), ("系统管理员", "admin@example.com"))
 
@@ -70,6 +73,12 @@ class SystemSettingsTests(APITestCase):
         self.assertNotIn("file_audit_retention_days", response.data)
         self.assertEqual(response.data["watermark_mode"], "username")
         self.assertEqual(response.data["watermark_content"], "appearance-user")
+        self.assertEqual(response.data["github_url"], "https://github.com/")
+
+    def test_github_url_requires_http_or_https(self):
+        for value in ["", "javascript:alert(1)", "ftp://github.com/example/filehub", "github.com/example/filehub"]:
+            response = self.client.patch("/api/settings/", {"settings": {"github_url": value}}, format="json")
+            self.assertEqual(response.status_code, 400)
 
     def test_custom_watermark_requires_text(self):
         response = self.client.patch("/api/settings/", {

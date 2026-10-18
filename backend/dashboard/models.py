@@ -213,6 +213,7 @@ class SystemSetting(models.Model):
     file_audit_retention_days = models.PositiveIntegerField(default=180)
     operation_audit_retention_days = models.PositiveIntegerField(default=180)
     login_expiry_minutes = models.PositiveIntegerField(default=480)
+    github_url = models.URLField(default="https://github.com/", max_length=500)
     updated_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name="updated_system_settings")
     updated_at = models.DateTimeField(auto_now=True)
 

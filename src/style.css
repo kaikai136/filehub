@@ -69,6 +69,7 @@ a { color: inherit; text-decoration: none; }
 .global-search .el-input__inner { font-size: 13px; }
 .icon-button { position: relative; display: grid; place-items: center; width: 30px; height: 30px; border: 0; color: #7c8795; background: transparent; cursor: pointer; font-size: 18px; }
 .icon-button:hover { color: #3478d4; }
+.icon-button .github-icon { width: 18px; height: 18px; fill: currentColor; }
 .notification-badge { display: inline-flex; }
 .notification-badge .el-badge__content { top: 3px; right: 5px; border-width: 1px; font-size: 10px; transform: translate(55%, -40%); }
 .notification-ticker { position: absolute; left: 50%; display: flex; width: min(560px, 42vw); min-width: 0; align-items: center; height: 32px; padding: 0; overflow: hidden; border: 0; color: #e5484d; background: transparent; cursor: pointer; font-size: 16px; font-weight: 600; text-align: left; transform: translateX(-50%); }
