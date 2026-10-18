@@ -129,34 +129,41 @@ API 根路径为 `/api/`。除登录、滑块挑战/校验和双因素登录验�
 
 ## Docker 单机部署
 
-在仓库根目录复制环境变量示例：
+部署使用 YAML 配置文件，可选择 SQLite 或 MySQL，并配置 Redis Channel Layer、时区、上传限制和 Django HTTPS 安全选项；前后端镜像分别构建，Docker Compose 仅负责启动容器。先复制配置模板：
 
 ```powershell
-Copy-Item deploy/.env.example deploy/.env
+Copy-Item deploy/config.yaml.example deploy/config.yaml
 ```
 
-编辑 `deploy/.env`，设置强随机 `DJANGO_SECRET_KEY`，并按部署域名调整 `DJANGO_ALLOWED_HOSTS`、`CSRF_TRUSTED_ORIGINS` 和 `FILEHUB_PORT`。然后启动：
+编辑 `deploy/config.yaml`，设置强随机 `secret_key`，并按部署域名调整 `allowed_hosts`、`csrf_trusted_origins`。分别构建两个镜像：
 
 ```powershell
-docker compose --env-file deploy/.env -f deploy/docker-compose.yaml up -d --build
+docker build -f deploy/backend.Dockerfile -t filehub-backend:latest .
+docker build -f deploy/frontend.Dockerfile -t filehub-frontend:latest .
 ```
 
-默认访问 `http://localhost:8080`。Compose 启动后端时会自动迁移数据库、收集 Django Admin 静态资源并运行 Daphne；Nginx 统一代理前端、API、Admin、静态资源和 WebSocket。SQLite 数据保存在 `filehub_data` 命名卷中，静态文件保存在 `filehub_static` 卷中。
-
-查看状态和日志：
+使用 Compose 启动已构建镜像：
 
 ```powershell
-docker compose --env-file deploy/.env -f deploy/docker-compose.yaml ps
-docker compose --env-file deploy/.env -f deploy/docker-compose.yaml logs -f
+docker compose -f deploy/docker-compose.yaml up -d
 ```
 
-停止服务但保留数据：
+默认访问 `http://localhost:8080`。后端启动时自动迁移数据库、收集 Django Admin 静态资源并运行 Daphne；Nginx 统一代理前端、API、Admin、静态资源和 WebSocket。SQLite 数据与静态文件分别保存在 Docker 命名卷中。详细步骤见 [`deploy/README.md`](deploy/README.md)。
+
+查看容器和日志：
 
 ```powershell
-docker compose --env-file deploy/.env -f deploy/docker-compose.yaml down
+docker ps
+docker compose -f deploy/docker-compose.yaml logs -f
 ```
 
-删除命名卷会永久删除数据库数据，执行前请确保已有备份。更多配置、备份和 HTTPS 说明见 [`deploy/README.md`](deploy/README.md)。当前 Compose 方案面向单机单后端；多实例需迁移 PostgreSQL，并将 Channels 内存层改为 Redis。
+停止服务但保留数据卷：
+
+```powershell
+docker compose -f deploy/docker-compose.yaml down
+```
+
+删除 `filehub-data` 卷会永久删除数据库，执行前请确保已有备份。更多镜像构建、容器运行、备份和 HTTPS 说明见 [`deploy/README.md`](deploy/README.md)。当前方案面向单机单后端；多实例需迁移 PostgreSQL，并将 Channels 内存层改为 Redis。
 
 ## 测试与构建
 
@@ -177,8 +184,8 @@ py backend/manage.py makemigrations --check --dry-run
 
 ## 安全与运维提示
 
-- 生产环境必须关闭 `DJANGO_DEBUG`，正确配置允许域名和 HTTPS 可信来源，并通过 HTTPS 访问。
-- `DJANGO_SECRET_KEY` 同时参与 SSH 凭据加密。丢失密钥会导致既有加密凭据无法解密；随意更换会造成同样影响。请限制 `.env` 文件权限并备份密钥。
-- 备份时同时保存 SQLite 数据库与对应密钥。Docker SQLite 数据位于 `filehub_data` 卷；容器重建不会清除该卷，`docker compose down -v` 会删除它。
-- 当前应用使用 SQLite 和 Channels 内存层，适合单机单后端。不要直接横向扩展 Daphne 容器，否则内存 Channel Layer 无法跨进程同步。
+- 生产环境必须在 `deploy/config.yaml` 中关闭 `debug`，正确配置允许域名和 HTTPS 可信来源，并通过 HTTPS 访问。
+- `secret_key` 同时参与 SSH 凭据加密。丢失密钥会导致既有加密凭据无法解密；随意更换会造成同样影响。请限制 `deploy/config.yaml` 文件权限并备份密钥。
+- 备份时同时保存 SQLite 数据库与对应密钥。Docker SQLite 数据位于 `filehub-data` 卷；删除该卷会永久删除数据库。
+- 默认部署使用 SQLite 和 Channels 内存层，适合单机单后端。横向扩展时应改用 MySQL/PostgreSQL 与 Redis Channel Layer，内存层无法跨进程同步。
 - 文件导入、远程 SSH、Shell 命令及 K8s 命令均具有操作风险；只为可信用户分配相应权限，并确认目标主机和命令内容。

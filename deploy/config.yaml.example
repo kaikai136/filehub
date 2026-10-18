@@ -1,0 +1,69 @@
+# Replace with a long, unique random value before deployment.
+# This key also encrypts stored SSH credentials; keep it backed up and stable.
+secret_key: REPLACE_WITH_A_LONG_RANDOM_SECRET
+debug: false
+
+allowed_hosts:
+  - localhost
+  - 127.0.0.1
+
+csrf_trusted_origins:
+  - http://localhost:8080
+
+cors_allowed_origins:
+  - http://localhost:5173
+  - http://127.0.0.1:5173
+
+database:
+  # Supported engines: sqlite, mysql. MySQL/MariaDB must be reachable from backend container.
+  engine: sqlite
+  name: /data/filehub.sqlite3
+  options:
+    timeout: 30
+  # To use MySQL, replace the engine/name/options above with this configuration:
+  # engine: mysql
+  # name: filehub
+  # user: filehub
+  # password: "CHANGE_ME"
+  # host: mysql.example.internal  # Do not use localhost for an external database.
+  # port: 3306
+  # conn_max_age: 60
+  # conn_health_checks: true
+  # options:
+  #   charset: utf8mb4
+  #   connect_timeout: 10
+
+channels:
+  # Use redis for multiple ASGI workers/instances; Redis is not bundled in Compose.
+  backend: memory
+  redis:
+    url: redis://127.0.0.1:6379/0
+  # Set backend: redis to activate this URL. Use rediss:// for TLS.
+
+application:
+  language_code: zh-hans
+  time_zone: Asia/Shanghai
+  use_i18n: true
+  use_tz: true
+  static_url: /static/
+  static_root: /app/backend/staticfiles
+  data_upload_max_memory_size: 2621440
+  file_upload_max_memory_size: 2621440
+  # file_upload_temp_dir: /tmp
+
+security:
+  # Enable when requests arrive through a trusted proxy that sets X-Forwarded-Proto.
+  trust_proxy_ssl_header: true
+  # Keep false behind TLS termination unless Django itself should redirect HTTP.
+  secure_ssl_redirect: false
+  session_cookie_secure: false
+  csrf_cookie_secure: false
+  session_cookie_httponly: true
+  csrf_cookie_httponly: false
+  # Set HSTS only after HTTPS works correctly for this domain.
+  hsts_seconds: 0
+  hsts_include_subdomains: false
+  hsts_preload: false
+  content_type_nosniff: true
+  referrer_policy: same-origin
+  use_x_forwarded_host: false

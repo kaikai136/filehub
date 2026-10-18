@@ -7,5 +7,5 @@ backend/__pycache__
 backend/**/__pycache__
 backend/**/*.pyc
 .venv
-deploy/.env
+deploy/config.yaml
 *.log
