@@ -144,6 +144,17 @@ docker build -f deploy/backend.Dockerfile -t filehub-backend:latest .
 docker build -f deploy/frontend.Dockerfile -t filehub-frontend:latest .
 ```
 
+也可以在项目根目录通过 Shell 脚本构建并推送至阿里云镜像仓库（首次使用前先执行 `docker login registry.cn-beijing.aliyuncs.com`）：
+
+```sh
+sh publish-images.sh                        # 默认标签 latest
+sh publish-images.sh v1.0.0                 # 指定前后端共同使用的标签
+sh publish-images.sh v1.0.0 --keep-images   # 推送成功后保留本地镜像
+sh publish-images.sh v1.0.0 --dry-run       # 仅打印命令，不构建、推送或删除
+```
+
+脚本按顺序构建后端、构建前端、推送后端、推送前端，两次推送均成功后才删除对应的本地镜像标签。任何步骤失败都会立即停止，不自动登录或重试；可从任意工作目录调用。默认仓库为 `registry.cn-beijing.aliyuncs.com/kaikai136`。
+
 使用 Compose 启动已构建镜像：
 
 ```powershell
