@@ -1,13 +1,13 @@
 <template>
   <div class="page audit-page">
-    <div class="page-heading"><div><div class="eyebrow">运维</div><h1>文件审计</h1><p>查看远程文件的内容变更记录。</p></div><el-button :icon="Refresh" :loading="loading" @click="load">刷新</el-button></div>
+    <div class="page-heading"><div><div class="eyebrow">运维</div><h1>文件审计</h1><p>查看远程文件的内容变更记录。</p></div><el-button :icon="Refresh" :loading="loading" @click="load" class="icon-primary">刷新</el-button></div>
     <div class="audit-filters">
       <el-date-picker v-model="filters.time" type="datetimerange" value-format="YYYY-MM-DDTHH:mm:ss" start-placeholder="开始时间" end-placeholder="结束时间" />
       <el-input v-model="filters.project" placeholder="项目名" clearable />
       <el-input v-model="filters.ip" placeholder="IP 地址" clearable />
       <el-input v-model="filters.directory" placeholder="文件目录" clearable />
       <el-input v-model="filters.operator" placeholder="操作人" clearable @keyup.enter="search" />
-      <el-button type="primary" :icon="Search" @click="search">查询</el-button>
+      <el-button type="primary" :icon="Search" @click="search" class="icon-primary">查询</el-button>
       <el-button @click="reset">重置</el-button>
     </div>
     <el-alert v-if="error" :title="error" type="error" :closable="false" />
@@ -17,7 +17,7 @@
       <el-table-column prop="directory" label="文件目录" min-width="280" show-overflow-tooltip />
       <el-table-column label="操作人" min-width="140"><template #default="{ row }">{{ row.operator.name }}</template></el-table-column>
       <el-table-column label="更改时间" min-width="180"><template #default="{ row }">{{ formatDate(row.changed_at) }}</template></el-table-column>
-      <el-table-column label="查看" width="82" fixed="right"><template #default="{ row }"><el-tooltip content="查看变更"><el-button text :icon="View" aria-label="查看文件变更" @click="showDiff(row)" /></el-tooltip></template></el-table-column>
+      <el-table-column label="查看" width="82" fixed="right"><template #default="{ row }"><el-tooltip content="查看变更"><el-button text :icon="View" aria-label="查看文件变更" @click="showDiff(row)" class="icon-primary" /></el-tooltip></template></el-table-column>
     </el-table>
     <div class="audit-pagination"><el-pagination v-model:current-page="page" v-model:page-size="pageSize" :page-sizes="[10, 20, 50, 100]" :total="total" layout="total, sizes, prev, pager, next" @current-change="load" @size-change="page = 1; load()" /></div>
     <el-dialog v-model="diffVisible" width="82%" top="5vh" :title="selected?.directory || '文件变更'">

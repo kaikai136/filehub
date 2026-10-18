@@ -2,7 +2,7 @@
   <el-popover placement="bottom-end" :width="390" trigger="click" popper-class="notification-popper">
     <template #reference>
       <el-badge :value="unreadCount" :max="99" :hidden="unreadCount === 0" class="notification-badge">
-        <button class="icon-button" type="button" aria-label="通知"><el-icon><Bell /></el-icon></button>
+        <button class="icon-button icon-warning" type="button" aria-label="通知"><el-icon class="icon-primary"><Bell /></el-icon></button>
       </el-badge>
     </template>
     <div class="notification-panel">
@@ -10,7 +10,7 @@
         <strong>通知</strong>
         <el-button text type="primary" size="small" :disabled="unreadCount === 0" @click="$emit('read-all')">全部已读</el-button>
       </div>
-      <div v-if="loading" class="notification-state"><el-icon class="is-loading"><Loading /></el-icon><span>正在加载</span></div>
+      <div v-if="loading" class="notification-state"><el-icon class="icon-primary is-loading"><Loading /></el-icon><span>正在加载</span></div>
       <div v-else-if="error" class="notification-state notification-error"><span>{{ error }}</span><el-button text type="primary" @click="$emit('refresh')">重试</el-button></div>
       <el-empty v-else-if="!items.length" :image-size="58" description="暂无配置变更" />
       <el-scrollbar v-else max-height="430px">
@@ -22,7 +22,7 @@
             <div class="notification-path" :title="item.path">{{ item.path || '未设置文件路径' }}</div>
           </div>
           <el-tooltip v-if="!item.is_read" content="标记已读" placement="left">
-            <button class="notification-read" type="button" aria-label="标记已读" @click.stop="$emit('read', item)"><el-icon><CircleCheck /></el-icon></button>
+            <button class="notification-read" type="button" aria-label="标记已读" @click.stop="$emit('read', item)"><el-icon class="icon-success"><CircleCheck /></el-icon></button>
           </el-tooltip>
         </article>
       </el-scrollbar>

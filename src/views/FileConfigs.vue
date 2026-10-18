@@ -2,25 +2,25 @@
   <div class="page config-page">
     <div class="page-heading">
       <div><div class="eyebrow">资源管理</div><h1>文件管理</h1><p>配置远程主机和需要获取的文件路径。</p></div>
-      <el-button v-if="hasPermission('file_configs.create')" type="primary" :icon="Plus" @click="openCreate">新增配置</el-button>
+      <el-button v-if="hasPermission('file_configs.create')" type="primary" :icon="Plus" @click="openCreate" class="icon-success">新增配置</el-button>
     </div>
     <div class="module-toolbar">
-      <el-input v-model="search" :prefix-icon="Search" placeholder="搜索项目、主机或 IP" clearable @input="loadConfigs" />
+      <el-input v-model="search" :prefix-icon="Search" placeholder="搜索项目、主机或 IP" clearable @input="loadConfigs" class="icon-primary" />
       <span class="toolbar-count">共 {{ configs.length }} 个配置</span>
     </div>
     <div class="resource-list config-table">
       <div class="config-header file-config-grid"><span>项目</span><span>主机名称</span><span>IP 地址</span><span>机器名称</span><span>文件路径</span><span>状态</span><span>操作</span></div>
       <div v-for="item in configs" :key="item.id" class="config-row file-config-grid">
-        <div class="primary-cell"><span class="table-avatar folder-avatar"><el-icon><FolderOpened /></el-icon></span><strong :title="item.project_path">{{ item.project_path }}</strong></div>
+        <div class="primary-cell"><span class="table-avatar folder-avatar"><el-icon class="icon-warning"><FolderOpened /></el-icon></span><strong :title="item.project_path">{{ item.project_path }}</strong></div>
         <span>{{ item.host_name }}</span>
         <span>{{ item.ip_address }}:{{ item.port }}</span>
         <span>{{ item.machine_name }}</span>
         <span class="path-cell" :title="item.file_path">{{ item.file_path }}</span>
         <div class="file-config-status"><el-tag size="small" effect="plain" :type="item.fetch_status === 'success' ? 'primary' : item.fetch_status === 'error' ? 'danger' : 'info'" :title="fetchHint(item)">{{ fileCountText(item) }}</el-tag></div>
         <div class="file-config-actions">
-          <el-tooltip v-if="hasPermission('file_configs.edit')" content="编辑配置" placement="top"><el-button text :icon="EditPen" aria-label="编辑配置" :disabled="!!pendingActions[item.id] || saving" @click="openEdit(item)" /></el-tooltip>
-          <el-tooltip v-if="hasPermission('file_configs.execute')" content="获取文件列表" placement="top"><el-button text :icon="Refresh" aria-label="获取文件列表" :loading="!!pendingActions[item.id]" :disabled="!!pendingActions[item.id] || saving" @click="refreshFiles(item)" /></el-tooltip>
-          <el-tooltip v-if="hasPermission('file_configs.delete')" content="删除配置" placement="top"><el-button text type="danger" :icon="Delete" aria-label="删除配置" :disabled="!!pendingActions[item.id] || saving" @click="deleteConfig(item)" /></el-tooltip>
+          <el-tooltip v-if="hasPermission('file_configs.edit')" content="编辑配置" placement="top"><el-button text :icon="EditPen" aria-label="编辑配置" :disabled="!!pendingActions[item.id] || saving" @click="openEdit(item)" class="icon-primary" /></el-tooltip>
+          <el-tooltip v-if="hasPermission('file_configs.execute')" content="获取文件列表" placement="top"><el-button text :icon="Refresh" aria-label="获取文件列表" :loading="!!pendingActions[item.id]" :disabled="!!pendingActions[item.id] || saving" @click="refreshFiles(item)" class="icon-primary" /></el-tooltip>
+          <el-tooltip v-if="hasPermission('file_configs.delete')" content="删除配置" placement="top"><el-button text type="danger" :icon="Delete" aria-label="删除配置" :disabled="!!pendingActions[item.id] || saving" @click="deleteConfig(item)" class="icon-danger" /></el-tooltip>
         </div>
       </div>
       <el-empty v-if="!configs.length" description="暂无文件管理配置" />

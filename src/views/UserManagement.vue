@@ -1,7 +1,7 @@
 <template>
   <div class="page user-page">
-    <div class="page-heading"><div><div class="eyebrow">系统管理</div><h1>用户管理</h1><p>管理登录用户和角色。</p></div><el-button v-if="hasPermission('users.create')" type="primary" :icon="Plus" @click="openCreate">新增用户</el-button></div>
-    <div class="module-toolbar"><el-input v-model="query" :prefix-icon="Search" placeholder="搜索登录名或姓名" clearable /><span class="toolbar-count">共 {{ filteredUsers.length }} 个用户</span></div>
+    <div class="page-heading"><div><div class="eyebrow">系统管理</div><h1>用户管理</h1><p>管理登录用户和角色。</p></div><el-button v-if="hasPermission('users.create')" type="primary" :icon="Plus" @click="openCreate" class="icon-success">新增用户</el-button></div>
+    <div class="module-toolbar"><el-input v-model="query" :prefix-icon="Search" placeholder="搜索登录名或姓名" clearable class="icon-primary" /><span class="toolbar-count">共 {{ filteredUsers.length }} 个用户</span></div>
     <el-table :data="filteredUsers" class="admin-table" v-loading="loading">
       <el-table-column prop="username" label="登录名" min-width="150" />
       <el-table-column prop="name" label="姓名" min-width="150" />
@@ -16,9 +16,9 @@
         </template>
       </template></el-table-column>
       <el-table-column label="操作" width="140"><template #default="{ row }"><div class="admin-actions">
-        <el-tooltip v-if="hasPermission('users.edit')" content="编辑用户"><el-button text :icon="EditPen" aria-label="编辑用户" :disabled="saving || !canManageUser(row)" @click="openEdit(row)" /></el-tooltip>
-        <el-tooltip v-if="hasPermission('users.edit')" :content="row.id === currentUser?.id ? '不能停用当前用户' : row.is_active ? '禁用用户' : '启用用户'"><span><el-button text :icon="row.is_active ? VideoPause : VideoPlay" :aria-label="row.is_active ? '禁用用户' : '启用用户'" :disabled="saving || row.id === currentUser?.id || !canManageUser(row)" @click="toggleUser(row)" /></span></el-tooltip>
-        <el-tooltip v-if="hasPermission('users.delete')" :content="row.id === currentUser?.id ? '不能删除当前用户' : '删除用户'"><span><el-button text type="danger" :icon="Delete" aria-label="删除用户" :disabled="saving || row.id === currentUser?.id || !canManageUser(row)" @click="deleteUser(row)" /></span></el-tooltip>
+        <el-tooltip v-if="hasPermission('users.edit')" content="编辑用户"><el-button text :icon="EditPen" aria-label="编辑用户" :disabled="saving || !canManageUser(row)" @click="openEdit(row)" class="icon-primary" /></el-tooltip>
+        <el-tooltip v-if="hasPermission('users.edit')" :content="row.id === currentUser?.id ? '不能停用当前用户' : row.is_active ? '禁用用户' : '启用用户'"><span><el-button text :icon="row.is_active ? VideoPause : VideoPlay" :aria-label="row.is_active ? '禁用用户' : '启用用户'" :disabled="saving || row.id === currentUser?.id || !canManageUser(row)" @click="toggleUser(row)" :class="{ 'icon-danger': row.is_active, 'icon-success': !(row.is_active) }" /></span></el-tooltip>
+        <el-tooltip v-if="hasPermission('users.delete')" :content="row.id === currentUser?.id ? '不能删除当前用户' : '删除用户'"><span><el-button text type="danger" :icon="Delete" aria-label="删除用户" :disabled="saving || row.id === currentUser?.id || !canManageUser(row)" @click="deleteUser(row)" class="icon-danger" /></span></el-tooltip>
       </div></template></el-table-column>
     </el-table>
     <el-alert v-if="errorMessage" :title="errorMessage" type="error" :closable="false" />

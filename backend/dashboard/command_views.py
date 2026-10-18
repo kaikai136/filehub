@@ -17,6 +17,8 @@ from .command_execution import (
 from .models import CommandExecution, FileConfig, RemoteFile
 from .permissions import has_permission
 from .rbac import require_permission
+from .shell_safety import shell_command_error
+from .command_policy import active_rules
 
 
 MAX_COMMAND_LENGTH = 10000
@@ -120,6 +122,11 @@ def command_executions(request):
         if page is None:
             return Response({"detail": "分页参数无效"}, status=400)
         queryset = _visible_executions(request.user)
+        mode = request.query_params.get("mode")
+        if mode is not None:
+            if mode not in {"shell", "k8s"}:
+                return Response({"detail": "执行类型必须是 shell 或 k8s"}, status=400)
+            queryset = queryset.filter(mode=mode)
         count = queryset.count()
         start = (page - 1) * page_size
         results = [serialize_execution(item, requesting_user=request.user) for item in queryset[start:start + page_size]]
@@ -144,7 +151,7 @@ def command_executions(request):
 
     remote_file = None
     file_path = ""
-    remote_file_id = data.get("remote_file_id")
+    remote_file_id = data.get("remote_file_id") if mode == "k8s" else None
     if remote_file_id not in (None, ""):
         try:
             remote_file = RemoteFile.objects.select_related("file_config").get(pk=int(remote_file_id), file_config=config, file_type="file")
@@ -152,12 +159,22 @@ def command_executions(request):
             return Response({"detail": "所选文件不属于当前执行机器"}, status=400)
         file_path = _remote_path(remote_file)
 
-    command = str(data.get("command", "")).strip()
+    raw_command = str(data.get("command", ""))
+    command = raw_command.strip()
     if mode == "k8s" and remote_file and not command:
         import shlex
         command = f"kubectl apply -f {shlex.quote(file_path)}"
-    if not command or len(command) > MAX_COMMAND_LENGTH or "\x00" in command:
+    if not command or len(raw_command) > MAX_COMMAND_LENGTH or (mode == "k8s" and "\x00" in command):
         return Response({"detail": "命令内容不能为空且不能超过 10000 个字符"}, status=400)
+
+    if mode == "shell":
+        safety_error = shell_command_error(raw_command, active_rules())
+        if safety_error:
+            record_operation_audit(
+                request, "命令执行", "安全拦截", f"{config.host_name}（{config.ip_address}）",
+                safety_error,
+            )
+            return Response({"detail": safety_error, "code": "dangerous_shell_command"}, status=400)
 
     with _submission_lock:
         active = CommandExecution.objects.filter(status__in=ACTIVE_STATUSES)

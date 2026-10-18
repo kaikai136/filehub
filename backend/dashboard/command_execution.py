@@ -12,6 +12,8 @@ from django.utils import timezone
 
 from .models import CommandExecution, CommandExecutionOutput, OperationAudit
 from .ssh import connect
+from .shell_safety import shell_command_error
+from .command_policy import active_rules
 
 
 logger = logging.getLogger(__name__)
@@ -104,6 +106,8 @@ def _finish(execution, status, exit_code=None, error_message=""):
     detail = f"任务 #{execution.id}，{execution.mode}，路径 {execution.working_directory}"
     if exit_code is not None:
         detail += f"，退出码 {exit_code}"
+    if error_message:
+        detail += f"，原因 {error_message}"
     _audit(execution, {"succeeded": "成功", "failed": "失败", "stopped": "停止", "timeout": "超时"}[status], detail)
     _broadcast(execution.id, {
         "type": "status", "status": status, "exit_code": exit_code,
@@ -124,6 +128,12 @@ def _run_execution(execution_id):
         if not execution.file_config:
             _finish(execution, "failed", error_message="执行机器已被删除")
             return
+
+        if execution.mode == "shell":
+            safety_error = shell_command_error(execution.command, active_rules())
+            if safety_error:
+                _finish(execution, "failed", error_message=safety_error)
+                return
 
         execution.status = "running"
         execution.started_at = timezone.now()

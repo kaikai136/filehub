@@ -2,7 +2,7 @@
   <div class="page role-page">
     <div class="page-heading">
       <div><div class="eyebrow">系统管理</div><h1>角色管理</h1><p>配置角色权限，查看关联用户。</p></div>
-      <el-button v-if="hasPermission('roles.create')" type="primary" :icon="Plus" @click="openEditor(null)">新增角色</el-button>
+      <el-button v-if="hasPermission('roles.create')" type="primary" :icon="Plus" @click="openEditor(null)" class="icon-success">新增角色</el-button>
     </div>
     <el-alert v-if="errorMessage" :title="errorMessage" type="error" :closable="false" />
     <el-table :data="roles" class="admin-table" v-loading="loading">
@@ -12,9 +12,9 @@
       <el-table-column label="用户数据" width="130"><template #default="{ row }"><el-button text type="primary" @click="showUsers(row)">{{ row.user_count }} 名用户</el-button></template></el-table-column>
       <el-table-column label="权限管理" width="140"><template #default="{ row }"><el-button text type="primary" @click="openEditor(row)">{{ row.permissions.length }} 项权限</el-button></template></el-table-column>
       <el-table-column label="操作" width="140"><template #default="{ row }"><div class="admin-actions">
-        <el-tooltip :content="row.is_builtin ? '内置角色不可编辑' : !canManageRole(row) ? '不能管理权限更高的角色' : '编辑角色'"><span><el-button v-if="hasPermission('roles.edit')" text :icon="EditPen" aria-label="编辑角色" :disabled="row.is_builtin || !canManageRole(row) || saving" @click="openEditor(row)" /></span></el-tooltip>
-        <el-tooltip :content="row.is_builtin ? '内置角色不可停用' : '切换角色状态'"><span><el-button v-if="hasPermission('roles.edit')" text :icon="row.is_active ? VideoPause : VideoPlay" :aria-label="row.is_active ? '禁用角色' : '启用角色'" :disabled="row.is_builtin || !canManageRole(row) || saving" @click="toggleRole(row)" /></span></el-tooltip>
-        <el-tooltip :content="row.is_builtin ? '内置角色不可删除' : row.user_count ? '请先移除关联用户' : '删除角色'"><span><el-button v-if="hasPermission('roles.delete')" text type="danger" :icon="Delete" aria-label="删除角色" :disabled="row.is_builtin || !canManageRole(row) || !!row.user_count || saving" @click="deleteRole(row)" /></span></el-tooltip>
+        <el-tooltip :content="row.is_builtin ? '内置角色不可编辑' : !canManageRole(row) ? '不能管理权限更高的角色' : '编辑角色'"><span><el-button v-if="hasPermission('roles.edit')" text :icon="EditPen" aria-label="编辑角色" :disabled="row.is_builtin || !canManageRole(row) || saving" @click="openEditor(row)" class="icon-primary" /></span></el-tooltip>
+        <el-tooltip :content="row.is_builtin ? '内置角色不可停用' : '切换角色状态'"><span><el-button v-if="hasPermission('roles.edit')" text :icon="row.is_active ? VideoPause : VideoPlay" :aria-label="row.is_active ? '禁用角色' : '启用角色'" :disabled="row.is_builtin || !canManageRole(row) || saving" @click="toggleRole(row)" :class="{ 'icon-danger': row.is_active, 'icon-success': !(row.is_active) }" /></span></el-tooltip>
+        <el-tooltip :content="row.is_builtin ? '内置角色不可删除' : row.user_count ? '请先移除关联用户' : '删除角色'"><span><el-button v-if="hasPermission('roles.delete')" text type="danger" :icon="Delete" aria-label="删除角色" :disabled="row.is_builtin || !canManageRole(row) || !!row.user_count || saving" @click="deleteRole(row)" class="icon-danger" /></span></el-tooltip>
       </div></template></el-table-column>
     </el-table>
     <el-dialog v-model="dialogVisible" :title="readOnly ? '查看角色权限' : editing ? '编辑角色' : '新增角色'" width="860px" :close-on-click-modal="false" :close-on-press-escape="!saving" :before-close="beforeClose" @closed="clearValidation">

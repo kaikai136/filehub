@@ -4,7 +4,7 @@
       <div><div class="eyebrow">系统总览</div><h1>概览</h1><p>查看 FileHub 服务端与业务资源的实时状态。</p></div>
       <div class="dashboard-heading-actions">
         <span v-if="lastUpdated" class="dashboard-updated">更新于 {{ lastUpdated }}</span>
-        <el-button :icon="Refresh" :loading="loading" @click="loadData">刷新数据</el-button>
+        <el-button :icon="Refresh" :loading="loading" @click="loadData" class="icon-primary">刷新数据</el-button>
       </div>
     </div>
 
@@ -15,13 +15,13 @@
     <template v-else-if="data">
       <section class="server-banner">
         <div class="server-identity">
-          <div class="server-icon"><el-icon><Monitor /></el-icon></div>
+          <div class="server-icon"><el-icon class="icon-primary"><Monitor /></el-icon></div>
           <div>
             <div class="server-name">{{ data.server.name }} <span class="status-pill"><i></i>运行中</span></div>
             <div class="server-meta">
-              <span><el-icon><Location /></el-icon>{{ data.server.address }}</span>
-              <span><el-icon><Platform /></el-icon>{{ data.server.os }}</span>
-              <span><el-icon><Timer /></el-icon>运行 {{ data.server.uptime }}</span>
+              <span><el-icon class="icon-primary"><Location /></el-icon>{{ data.server.address }}</span>
+              <span><el-icon class="icon-primary"><Platform /></el-icon>{{ data.server.os }}</span>
+              <span><el-icon class="icon-primary"><Timer /></el-icon>运行 {{ data.server.uptime }}</span>
             </div>
           </div>
         </div>
@@ -62,13 +62,13 @@
             <router-link v-for="resource in visibleResources" :key="resource.key" :to="resource.path" class="resource-row">
               <span class="resource-icon"><el-icon><component :is="resourceIcons[resource.key]" /></el-icon></span>
               <span class="resource-copy"><strong>{{ resource.label }}</strong><small>{{ resource.description }}</small></span>
-              <b>{{ resource.count }}</b><el-icon><ArrowRight /></el-icon>
+              <b>{{ resource.count }}</b><el-icon class="icon-primary"><ArrowRight /></el-icon>
             </router-link>
           </div>
           <el-empty v-if="!visibleResources.length" description="暂无可查看的业务资源" :image-size="48" />
         </section>
         <section class="panel activity-panel">
-          <div class="panel-heading"><div><h2>最近动态</h2><p>系统近期成功操作记录</p></div><router-link v-if="canAccess('/operation-audits')" to="/operation-audits" class="panel-more">查看全部 <el-icon><ArrowRight /></el-icon></router-link></div>
+          <div class="panel-heading"><div><h2>最近动态</h2><p>系统近期成功操作记录</p></div><router-link v-if="canAccess('/operation-audits')" to="/operation-audits" class="panel-more">查看全部 <el-icon class="icon-primary"><ArrowRight /></el-icon></router-link></div>
           <div v-if="data.activity.length" class="activity-list">
             <div v-for="item in data.activity" :key="item.id" class="activity-item">
               <span class="activity-mark" :class="item.type"><i></i></span>

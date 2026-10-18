@@ -2,14 +2,14 @@
   <div class="page settings-page">
     <div class="page-heading">
       <div><div class="eyebrow">系统管理</div><h1>系统设置</h1><p>管理界面偏好、个人信息、水印和审计数据保留策略。</p></div>
-      <el-button type="primary" :loading="saving" :icon="Check" @click="save">保存设置</el-button>
+      <el-button type="primary" :loading="saving" :icon="Check" @click="save" class="icon-success">保存设置</el-button>
     </div>
     <el-alert v-if="errorMessage" :title="errorMessage" type="error" :closable="false" show-icon />
     <el-skeleton v-if="loading" :rows="10" animated />
     <template v-else>
       <div class="settings-layout">
         <nav class="settings-nav" aria-label="设置分类">
-          <button v-for="item in navItems" :key="item.key" :class="{ active: activeSection === item.key }" @click="activeSection = item.key"><el-icon><component :is="item.icon" /></el-icon>{{ item.label }}</button>
+          <button v-for="item in navItems" :key="item.key" :class="{ active: activeSection === item.key }" @click="activeSection = item.key"><el-icon :class="item.key === 'retention' ? 'icon-purple' : 'icon-primary'"><component :is="item.icon" /></el-icon>{{ item.label }}</button>
         </nav>
         <div class="settings-content">
           <section v-show="activeSection === 'interface'" class="settings-section">

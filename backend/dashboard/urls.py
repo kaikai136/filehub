@@ -6,6 +6,7 @@ from . import settings_views
 from . import notification_views
 from . import auth_views
 from . import command_views
+from . import command_control_views
 from .views import (
     dashboard,
     accounts,
@@ -26,6 +27,7 @@ from .views import (
 )
 
 urlpatterns = [
+    path('command-control/', command_control_views.command_control),
     path('auth/slider-challenge/', auth_views.slider_challenge),
     path('auth/slider-verify/', auth_views.slider_verify),
     path('auth/verify-two-factor/', auth_views.verify_login),

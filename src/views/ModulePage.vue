@@ -2,19 +2,19 @@
   <div class="page module-page">
     <div class="page-heading">
       <div><div class="eyebrow">资源管理</div><h1>{{ title }}</h1><p>{{ description }}</p></div>
-      <el-button type="primary" :icon="Plus" @click="createDialog = true">新建{{ title }}</el-button>
+      <el-button type="primary" :icon="Plus" @click="createDialog = true" class="icon-success">新建{{ title }}</el-button>
     </div>
     <div class="module-toolbar">
-      <el-input v-model="query" :prefix-icon="Search" placeholder="搜索名称" clearable />
+      <el-input v-model="query" :prefix-icon="Search" placeholder="搜索名称" clearable class="icon-primary" />
       <el-select v-model="status" placeholder="全部状态" clearable><el-option label="运行中" value="running" /><el-option label="已停止" value="stopped" /></el-select>
       <span class="toolbar-count">共 {{ filteredItems.length }} 项</span>
     </div>
     <div v-if="filteredItems.length" class="resource-list">
       <div v-for="item in filteredItems" :key="item.name" class="resource-row">
-        <div class="resource-main"><span class="resource-avatar"><el-icon><component :is="item.icon" /></el-icon></span><div><strong>{{ item.name }}</strong><small>{{ item.detail }}</small></div></div>
+        <div class="resource-main"><span class="resource-avatar"><el-icon class="icon-purple"><component :is="item.icon" /></el-icon></span><div><strong>{{ item.name }}</strong><small>{{ item.detail }}</small></div></div>
         <el-tag :type="item.running ? 'success' : 'info'" effect="plain" size="small">{{ item.running ? '运行中' : '已停止' }}</el-tag>
         <span class="resource-updated">{{ item.updated }}</span>
-        <el-button text :icon="MoreFilled" />
+        <el-button text :icon="MoreFilled" class="icon-primary" />
       </div>
     </div>
     <el-empty v-else description="没有找到匹配的资源" />

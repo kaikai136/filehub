@@ -18,6 +18,7 @@ import FileAudit from './views/FileAudit.vue'
 import OperationAudit from './views/OperationAudit.vue'
 import Settings from './views/Settings.vue'
 import CommandExecution from './views/CommandExecution.vue'
+import CommandControl from './views/CommandControl.vue'
 import { clearAuth } from './api'
 import { authUser, refreshAuth } from './composables/useAuth'
 import { refreshSettings } from './composables/useSettings'
@@ -31,6 +32,7 @@ const router = createRouter({
     { path: '/', component: Dashboard, meta: { title: '概览' } },
     { path: '/users', component: UserManagement, meta: { title: '用户管理' } },
     { path: '/roles', component: RoleManagement, meta: { title: '角色管理' } },
+    { path: '/command-control', component: CommandControl, meta: { title: '命令控制' } },
     { path: '/forbidden', component: Forbidden, meta: { title: '无访问权限' } },
     { path: '/accounts', component: Accounts, meta: { title: '账号管理' } },
     { path: '/file-configs', component: FileConfigs, meta: { title: '文件管理' } },

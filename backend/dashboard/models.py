@@ -4,6 +4,12 @@ from django.conf import settings
 from django.db import models
 
 
+class CommandPolicy(models.Model):
+    rules = models.JSONField(default=list)
+    revision = models.PositiveIntegerField(default=1)
+    updated_at = models.DateTimeField(auto_now=True)
+
+
 class UserTwoFactor(models.Model):
     user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="two_factor")
     enabled = models.BooleanField(default=False)

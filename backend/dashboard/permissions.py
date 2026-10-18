@@ -10,6 +10,7 @@ PERMISSION_GROUPS = [
     {"key": "settings", "label": "设置", "permissions": [("view", "查看")]},
     {"key": "users", "label": "用户管理", "permissions": [("view", "查看"), ("create", "新增"), ("edit", "编辑"), ("delete", "删除")]},
     {"key": "roles", "label": "角色管理", "permissions": [("view", "查看"), ("create", "新增"), ("edit", "编辑"), ("delete", "删除")]},
+    {"key": "command_control", "label": "命令控制", "permissions": [("view", "查看")]},
 ]
 
 PERMISSION_CATALOG = [

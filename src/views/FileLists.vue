@@ -2,34 +2,34 @@
   <div class="page file-browser-page">
     <div class="page-heading">
       <div><div class="eyebrow">资源管理</div><h1>文件列表</h1><p>按项目、主机和文件夹浏览已获取的文件，包含隐藏文件。</p></div>
-      <el-button :icon="Refresh" :loading="loading" @click="loadFiles">刷新列表</el-button>
+      <el-button :icon="Refresh" :loading="loading" @click="loadFiles" class="icon-primary">刷新列表</el-button>
     </div>
     <div class="file-browser" v-loading="loading">
       <aside class="folder-panel">
         <div class="folder-panel-heading"><strong>目录列表</strong><span>{{ configs.length }} 个配置</span></div>
-        <el-input v-model="treeSearch" :prefix-icon="Search" placeholder="搜索项目、主机或文件夹" clearable aria-label="搜索目录" />
+        <el-input v-model="treeSearch" :prefix-icon="Search" placeholder="搜索项目、主机或文件夹" clearable aria-label="搜索目录" class="icon-primary" />
         <div class="folder-tree-scroll">
           <el-tree ref="treeRef" :data="treeData" node-key="key" :current-node-key="activeKey" :default-expanded-keys="expandedKeys" :filter-node-method="filterNode" :expand-on-click-node="false" highlight-current :indent="18" empty-text="暂无配置" @node-click="selectNode">
-            <template #default="{ data }"><span class="folder-tree-label" :title="data.title" :data-node-key="data.key"><el-icon><component :is="data.kind === 'host' ? Monitor : FolderOpened" /></el-icon><span>{{ data.label }}</span><small>{{ data.count }}</small></span></template>
+            <template #default="{ data }"><span class="folder-tree-label" :title="data.title" :data-node-key="data.key"><el-icon :class="data.kind === 'host' ? 'icon-primary' : 'icon-warning'"><component :is="data.kind === 'host' ? Monitor : FolderOpened" /></el-icon><span>{{ data.label }}</span><small>{{ data.count }}</small></span></template>
           </el-tree>
         </div>
       </aside>
       <section class="folder-content">
         <div class="folder-content-heading"><div class="folder-location"><h2>{{ activeNode?.label || '选择文件夹' }}</h2><p :title="location">{{ location }}</p></div><el-tag effect="plain">{{ scopedFiles.length }} 个文件</el-tag></div>
         <div class="folder-file-toolbar">
-          <el-input v-model="fileSearch" :prefix-icon="Search" placeholder="搜索当前范围内的文件" clearable aria-label="搜索文件" />
+          <el-input v-model="fileSearch" :prefix-icon="Search" placeholder="搜索当前范围内的文件" clearable aria-label="搜索文件" class="icon-primary" />
           <el-checkbox v-if="activeNode?.kind === 'folder'" v-model="recursive">包含子目录</el-checkbox>
           <span class="toolbar-count">显示 {{ visibleFiles.length }} 个文件</span>
         </div>
         <div v-if="activeConfig?.fetch_status === 'error'" class="folder-notice">最近一次获取失败：{{ activeConfig.fetch_error }}。当前展示上次成功获取的文件。</div>
         <div class="folder-table-scroll">
           <el-table :data="visibleFiles" class="folder-file-table" row-key="id" :empty-text="emptyText" style="width: 100%">
-            <el-table-column label="文件名称" min-width="240" sortable prop="name"><template #default="{ row }"><div class="browser-file-name" title="双击编辑文件" @dblclick.stop="openEditor(row)"><span class="table-avatar file-avatar"><el-icon><Document /></el-icon></span><div><strong :title="row.name">{{ row.name }}</strong><small :title="row.relative_path">{{ row.relative_path }}</small></div></div></template></el-table-column>
+            <el-table-column label="文件名称" min-width="240" sortable prop="name"><template #default="{ row }"><div class="browser-file-name" title="双击编辑文件" @dblclick.stop="openEditor(row)"><span class="table-avatar file-avatar"><el-icon class="icon-purple"><Document /></el-icon></span><div><strong :title="row.name">{{ row.name }}</strong><small :title="row.relative_path">{{ row.relative_path }}</small></div></div></template></el-table-column>
             <el-table-column v-if="activeNode?.kind !== 'folder'" label="主机" min-width="140"><template #default="{ row }">{{ configById.get(row.file_config_id)?.host_name || '—' }}</template></el-table-column>
             <el-table-column label="文件大小" min-width="110" sortable prop="size"><template #default="{ row }">{{ formatSize(row.size) }}</template></el-table-column>
             <el-table-column label="修改时间" min-width="180" sortable prop="modified_at"><template #default="{ row }">{{ formatDate(row.modified_at) }}</template></el-table-column>
             <el-table-column label="获取状态" min-width="100"><template #default><el-tag size="small" effect="plain" type="success">已获取</el-tag></template></el-table-column>
-            <el-table-column label="操作" width="100" fixed="right"><template #default="{ row }"><div class="admin-actions"><el-tooltip content="打开文件"><el-button text :icon="hasPermission('file_lists.edit') ? EditPen : View" :aria-label="hasPermission('file_lists.edit') ? '编辑文件' : '查看文件'" @click="openEditor(row)" /></el-tooltip><el-tooltip content="文件详情"><el-button text :icon="InfoFilled" aria-label="文件详情" @click="showDetail(row)" /></el-tooltip></div></template></el-table-column>
+            <el-table-column label="操作" width="100" fixed="right"><template #default="{ row }"><div class="admin-actions"><el-tooltip content="打开文件"><el-button text :icon="hasPermission('file_lists.edit') ? EditPen : View" :aria-label="hasPermission('file_lists.edit') ? '编辑文件' : '查看文件'" @click="openEditor(row)" class="icon-primary" /></el-tooltip><el-tooltip content="文件详情"><el-button text :icon="InfoFilled" aria-label="文件详情" @click="showDetail(row)" class="icon-primary" /></el-tooltip></div></template></el-table-column>
           </el-table>
         </div>
         <div class="folder-content-footer"><span>包含隐藏文件及隐藏目录内的文件，目录本身不计数</span><span v-if="activeConfig?.last_fetched_at">上次获取：{{ formatDate(activeConfig.last_fetched_at) }}</span></div>

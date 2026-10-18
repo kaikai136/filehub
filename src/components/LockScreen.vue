@@ -13,8 +13,8 @@
     <template v-if="!showLogin">
       <div class="lock-box">
         <button class="lock-trigger" type="button" title="解锁屏幕" aria-label="解锁屏幕" @click="openLogin">
-          <el-icon class="locked-icon"><Lock /></el-icon>
-          <el-icon class="unlocked-icon"><Unlock /></el-icon>
+          <el-icon class="icon-success locked-icon"><Lock /></el-icon>
+          <el-icon class="icon-success unlocked-icon"><Unlock /></el-icon>
         </button>
       </div>
 
@@ -39,14 +39,14 @@
       </div>
       <div class="computer-status" aria-label="设备状态">
         <span class="network-status" :class="{ offline: !online }" :title="online ? '网络已连接' : '网络已断开'">
-          <el-icon><Connection /></el-icon>
+          <el-icon class="icon-success"><Connection /></el-icon>
         </span>
-        <el-icon title="设备电源"><Switch /></el-icon>
+        <el-icon title="设备电源" class="icon-success"><Switch /></el-icon>
       </div>
     </template>
 
     <div v-else class="lock-login-box">
-      <el-avatar :size="128"><el-icon><User /></el-icon></el-avatar>
+      <el-avatar :size="128"><el-icon class="icon-primary"><User /></el-icon></el-avatar>
       <div class="lock-username">{{ user?.username || '' }}</div>
       <el-input
         ref="passwordInput"
@@ -60,7 +60,7 @@
       >
         <template #suffix>
           <button class="password-submit" type="button" aria-label="进入系统" :disabled="loading" @click="unlock">
-            <el-icon :class="{ 'is-loading': loading }"><Loading v-if="loading" /><ArrowRight v-else /></el-icon>
+            <el-icon class="icon-primary" :class="{ 'is-loading': loading }"><Loading v-if="loading" /><ArrowRight v-else /></el-icon>
           </button>
         </template>
       </el-input>

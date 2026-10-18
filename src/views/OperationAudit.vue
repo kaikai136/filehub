@@ -1,6 +1,6 @@
 <template>
   <div class="page audit-page">
-    <div class="page-heading"><div><div class="eyebrow">运维</div><h1>操作审计</h1><p>查询系统关键操作记录。</p></div><el-button :icon="Refresh" :loading="loading" @click="load">刷新</el-button></div>
+    <div class="page-heading"><div><div class="eyebrow">运维</div><h1>操作审计</h1><p>查询系统关键操作记录。</p></div><el-button :icon="Refresh" :loading="loading" @click="load" class="icon-primary">刷新</el-button></div>
     <div class="audit-filters">
       <el-date-picker v-model="filters.time" type="datetimerange" value-format="YYYY-MM-DDTHH:mm:ss" start-placeholder="开始时间" end-placeholder="结束时间" />
       <el-input v-model="filters.operator" placeholder="操作人" clearable />
@@ -8,7 +8,7 @@
       <el-input v-model="filters.action" placeholder="操作" clearable />
       <el-input v-model="filters.ip" placeholder="IP 地址" clearable />
       <el-input v-model="filters.keyword" placeholder="对象或详情" clearable @keyup.enter="search" />
-      <el-button type="primary" :icon="Search" @click="search">查询</el-button><el-button @click="reset">重置</el-button>
+      <el-button type="primary" :icon="Search" @click="search" class="icon-primary">查询</el-button><el-button @click="reset">重置</el-button>
     </div>
     <el-alert v-if="error" :title="error" type="error" :closable="false" />
     <el-table :data="records" class="admin-table" v-loading="loading" empty-text="暂无操作审计记录">
@@ -18,7 +18,7 @@
       <el-table-column prop="action" label="操作" min-width="110" />
       <el-table-column prop="object" label="对象" min-width="180" show-overflow-tooltip />
       <el-table-column prop="ip_address" label="IP" min-width="140"><template #default="{ row }">{{ row.ip_address || '—' }}</template></el-table-column>
-      <el-table-column label="详情" min-width="220"><template #default="{ row }"><div class="audit-detail-cell"><span>{{ row.detail || '—' }}</span><el-tooltip content="查看详情"><el-button text :icon="View" aria-label="查看操作详情" @click="showDetail(row)" /></el-tooltip></div></template></el-table-column>
+      <el-table-column label="详情" min-width="220"><template #default="{ row }"><div class="audit-detail-cell"><span>{{ row.detail || '—' }}</span><el-tooltip content="查看详情"><el-button text :icon="View" aria-label="查看操作详情" @click="showDetail(row)" class="icon-primary" /></el-tooltip></div></template></el-table-column>
     </el-table>
     <div class="audit-pagination"><el-pagination v-model:current-page="page" v-model:page-size="pageSize" :page-sizes="[10, 20, 50, 100]" :total="total" layout="total, sizes, prev, pager, next" @current-change="load" @size-change="page = 1; load()" /></div>
     <el-drawer v-model="detailVisible" title="操作详情" size="480px">

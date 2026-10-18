@@ -17,19 +17,19 @@
           <h1>{{ heading }}</h1>
           <p>{{ description }}</p>
         </header>
-        <div v-if="errorMessage" class="notice error" role="alert"><el-icon><WarningFilled /></el-icon>{{ errorMessage }}</div>
-        <div v-else-if="route.query.expired" class="notice info" role="status"><el-icon><Clock /></el-icon>登录已过期，请重新登录</div>
+        <div v-if="errorMessage" class="notice error" role="alert"><el-icon class="icon-danger"><WarningFilled /></el-icon>{{ errorMessage }}</div>
+        <div v-else-if="route.query.expired" class="notice info" role="status"><el-icon class="icon-primary"><Clock /></el-icon>登录已过期，请重新登录</div>
 
         <form v-if="!pending && !pendingSetup" class="login-form" @submit.prevent="submit">
           <label for="login-username">用户名</label>
-          <el-input id="login-username" v-model="username" size="large" placeholder="请输入用户名" autocomplete="username" aria-label="用户名" :prefix-icon="UserIcon" :disabled="loading" @focus="wakeLamp" />
+          <el-input id="login-username" v-model="username" size="large" placeholder="请输入用户名" autocomplete="username" aria-label="用户名" :prefix-icon="UserIcon" :disabled="loading" @focus="wakeLamp" class="icon-primary" />
           <label for="login-password">密码</label>
-          <el-input id="login-password" v-model="password" size="large" :type="showPassword ? 'text' : 'password'" placeholder="请输入密码" autocomplete="current-password" aria-label="密码" :prefix-icon="Lock" :disabled="loading" @focus="peekPassword" @input="peekPassword" @blur="stopPeeking">
-            <template #suffix><button class="password-toggle" type="button" :aria-label="showPassword ? '隐藏密码' : '显示密码'" @click.stop="showPassword = !showPassword"><el-icon><Hide v-if="showPassword" /><View v-else /></el-icon></button></template>
+          <el-input id="login-password" v-model="password" size="large" :type="showPassword ? 'text' : 'password'" placeholder="请输入密码" autocomplete="current-password" aria-label="密码" :prefix-icon="Lock" :disabled="loading" @focus="peekPassword" @input="peekPassword" @blur="stopPeeking" class="icon-success">
+            <template #suffix><button class="password-toggle" type="button" :aria-label="showPassword ? '隐藏密码' : '显示密码'" @click.stop="showPassword = !showPassword"><el-icon class="icon-primary"><Hide v-if="showPassword" /><View v-else /></el-icon></button></template>
           </el-input>
           <div class="form-options"><el-checkbox v-model="remember" :disabled="loading">记住用户名</el-checkbox><span>不会保存密码</span></div>
           <LoginSlider :reset-key="sliderResetKey" @verified="sliderToken = $event" />
-          <el-button class="submit" type="primary" size="large" native-type="submit" :loading="loading" :disabled="!username.trim() || !password || !sliderToken">进入 FileHub <el-icon v-if="!loading"><Right /></el-icon></el-button>
+          <el-button class="submit" type="primary" size="large" native-type="submit" :loading="loading" :disabled="!username.trim() || !password || !sliderToken">进入 FileHub <el-icon v-if="!loading" class="icon-primary"><Right /></el-icon></el-button>
         </form>
 
         <form v-else class="login-form" @submit.prevent="pendingSetup ? submitTwoFactorSetup() : submitTwoFactor()">
@@ -37,7 +37,7 @@
           <label for="two-factor-code">动态验证码</label>
           <el-input id="two-factor-code" v-model="code" class="code" size="large" placeholder="000000" aria-label="6 位动态验证码" inputmode="numeric" autocomplete="one-time-code" maxlength="6" :disabled="loading" @input="normalizeCode" />
           <el-button class="submit" type="primary" size="large" native-type="submit" :loading="loading" :disabled="!/^[0-9]{6}$/.test(code)">{{ pendingSetup ? '绑定并登录' : '验证并登录' }}</el-button>
-          <button class="back" type="button" :disabled="loading" @click="cancelTwoFactor"><el-icon><Back /></el-icon>返回账号登录</button>
+          <button class="back" type="button" :disabled="loading" @click="cancelTwoFactor"><el-icon class="icon-primary"><Back /></el-icon>返回账号登录</button>
         </form>
         <footer class="card-footer"><i></i>会话由 FileHub 安全策略保护<i></i></footer>
       </section>

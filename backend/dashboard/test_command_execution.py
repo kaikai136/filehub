@@ -82,6 +82,48 @@ class CommandExecutionApiTests(APITestCase):
         ), format="json")
         self.assertEqual(response.status_code, 201)
 
+    @patch("dashboard.command_views.start_execution")
+    def test_shell_rejection_is_audited_and_never_creates_or_starts_tasks(self, start):
+        for command in ["rm /tmp/file", "pwd | bash", "echo ok > /tmp/file", "pwd\r", "pwd\x00"]:
+            with self.subTest(command=command):
+                response = self.client.post("/api/command-executions/", self.payload(command=command), format="json")
+                self.assertEqual(response.status_code, 400)
+                self.assertEqual(response.data["code"], "dangerous_shell_command")
+                self.assertIn("Shell 安全拦截", response.data["detail"])
+        self.assertFalse(CommandExecution.objects.exists())
+        start.assert_not_called()
+        self.assertEqual(OperationAudit.objects.filter(module="命令执行", action="安全拦截").count(), 5)
+
+    @patch("dashboard.command_views.start_execution")
+    def test_superuser_cannot_bypass_shell_safety(self, start):
+        admin = get_user_model().objects.create_superuser("safety-admin", password="secret")
+        self.client.force_authenticate(admin)
+        response = self.client.post("/api/command-executions/", self.payload(command="sudo pwd"), format="json")
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.data["code"], "dangerous_shell_command")
+        self.assertFalse(CommandExecution.objects.exists())
+        start.assert_not_called()
+
+    @patch("dashboard.command_views.start_execution")
+    def test_shell_ignores_even_invalid_file_ids(self, start):
+        for file_id in [self.file.id, "invalid"]:
+            response = self.client.post("/api/command-executions/", self.payload(remote_file_id=file_id), format="json")
+            self.assertEqual(response.status_code, 201)
+            execution = CommandExecution.objects.get(pk=response.data["id"])
+            self.assertIsNone(execution.remote_file_id)
+            self.assertEqual(execution.file_path, "")
+            execution.status = "succeeded"
+            execution.save(update_fields=["status"])
+
+    @patch("dashboard.command_views.shell_command_error", side_effect=AssertionError("K8s must not use Shell policy"))
+    @patch("dashboard.command_views.start_execution")
+    def test_k8s_does_not_invoke_shell_safety(self, start, safety):
+        response = self.client.post("/api/command-executions/", self.payload(
+            mode="k8s", working_directory="/root", command="kubectl delete pod example",
+        ), format="json")
+        self.assertEqual(response.status_code, 201)
+        safety.assert_not_called()
+
     def test_validation_rejects_missing_values_and_unsafe_input(self):
         self.assertEqual(self.client.post("/api/command-executions/", self.payload(command=""), format="json").status_code, 400)
         self.assertEqual(self.client.post("/api/command-executions/", self.payload(mode="k8s", working_directory=""), format="json").status_code, 400)
@@ -130,6 +172,29 @@ class CommandExecutionApiTests(APITestCase):
         execution.status = "succeeded"
         execution.save(update_fields=["status"])
         self.assertEqual(self.client.post(f"/api/command-executions/{execution.id}/stop/").status_code, 409)
+
+    def test_history_filters_mode_before_pagination_without_expanding_visibility(self):
+        for operator, mode in [(self.user, "shell"), (self.user, "k8s"), (self.user, "shell"), (self.viewer, "shell")]:
+            CommandExecution.objects.create(
+                operator=operator, operator_name=operator.username, operator_username=operator.username,
+                file_config=self.config, project_name="demo", host_name="node-01", ip_address="192.0.2.20",
+                mode=mode, working_directory="/root", command="pwd", status="succeeded",
+            )
+        response = self.client.get("/api/command-executions/", {"mode": "shell", "page_size": 1, "page": 2})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["count"], 2)
+        self.assertEqual(len(response.data["results"]), 1)
+        self.assertEqual(response.data["results"][0]["mode"], "shell")
+        self.assertEqual(self.client.get("/api/command-executions/").data["count"], 3)
+        self.assertEqual(self.client.get("/api/command-executions/", {"mode": "k8s"}).data["count"], 1)
+        self.client.force_authenticate(self.viewer)
+        self.assertEqual(self.client.get("/api/command-executions/", {"mode": "shell"}).data["count"], 1)
+        self.assertEqual(self.client.get("/api/command-executions/", {"mode": "k8s"}).data["count"], 0)
+
+    def test_history_rejects_invalid_mode(self):
+        for mode in ["", "invalid", "Shell"]:
+            response = self.client.get("/api/command-executions/", {"mode": mode})
+            self.assertEqual(response.status_code, 400)
 
     def test_options_include_machine_and_remote_files(self):
         response = self.client.get("/api/command-executions/options/")
@@ -199,6 +264,32 @@ class CommandExecutionRunnerTests(APITestCase):
         self.execution.refresh_from_db()
         self.assertEqual(self.execution.status, "stopped")
         connect.assert_not_called()
+
+    @patch("dashboard.command_execution._broadcast")
+    @patch("dashboard.command_execution.connect")
+    def test_dangerous_queued_shell_command_fails_before_ssh(self, connect, broadcast):
+        from .command_execution import _run_execution
+        self.execution.command = "rm /tmp/file"
+        self.execution.save(update_fields=["command"])
+        _run_execution(self.execution.id)
+        self.execution.refresh_from_db()
+        self.assertEqual(self.execution.status, "failed")
+        self.assertIn("禁止执行 rm", self.execution.error_message)
+        connect.assert_not_called()
+        self.assertTrue(OperationAudit.objects.filter(module="命令执行", action="失败", detail__contains="禁止执行 rm").exists())
+        self.assertEqual(broadcast.call_args.args[1]["status"], "failed")
+
+    @patch("dashboard.command_execution.shell_command_error", side_effect=AssertionError("K8s must not use Shell policy"))
+    @patch("dashboard.command_execution._broadcast")
+    @patch("dashboard.command_execution.connect", side_effect=ConnectionError("expected mock connection"))
+    def test_k8s_runner_does_not_invoke_shell_safety(self, connect, broadcast, safety):
+        from .command_execution import _run_execution
+        self.execution.mode = "k8s"
+        self.execution.command = "kubectl get pods"
+        self.execution.save(update_fields=["mode", "command"])
+        _run_execution(self.execution.id)
+        safety.assert_not_called()
+        connect.assert_called_once()
 
 
 class CommandExecutionWebSocketTests(TransactionTestCase):
