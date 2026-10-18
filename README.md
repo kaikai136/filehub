@@ -1,60 +1,184 @@
 # FileHub
 
-Django + Vue 3 运维控制台，前端交互与布局参考 `C:\Users\kaikai\Desktop\kaikai\1Panel\frontend`。
+FileHub 是基于 Django REST Framework、Vue 3 和 TypeScript 的运维管理控制台，提供项目与主机管理、SSH 文件浏览、命令执行、访问控制和审计能力。后端使用 Django ASGI/Daphne 支持 HTTP API 与 WebSocket 实时输出，前端使用 Vite 构建。
 
-## 启动后端
+## 功能概览
+
+- **概览**：展示主机、资源指标、监控曲线、服务信息和近期动态。
+- **项目管理**：维护层级项目，关联主机配置；支持项目移动、排序以及配置导入/导出。
+- **SSH 账号**：统一管理 SSH 用户名、密码或私钥，并将敏感凭据加密保存。
+- **文件管理**：维护 SSH 主机与目录配置，测试连接、采集主机规格、刷新远程文件；支持批量操作及 Excel 导入/导出。
+- **文件列表**：浏览远程文件列表并查看文件内容。需要先为主机配置文件目录并成功刷新列表。
+- **命令执行**：通过 SSH 在主机上运行命令，查看实时输出、执行状态和历史记录；支持 Shell 与 K8s 执行模式。
+- **审计与通知**：记录文件变更和关键操作，通知用户主机配置的新增、修改与删除。
+- **用户与角色**：管理用户、角色和细粒度权限；支持管理员控制双因素认证（TOTP）。
+- **系统设置**：配置登录会话时长、GitHub 项目地址、界面字体、水印以及审计数据保留时间。
+- **登录安全**：登录滑块验证、可选的管理员强制 TOTP、固定时长登录会话和屏幕锁定。
+
+## 技术栈与目录
+
+| 路径 | 内容 |
+| --- | --- |
+| `backend/configHub/` | Django 项目设置、ASGI/WSGI 和 URL 配置 |
+| `backend/dashboard/` | API、模型、权限、SSH、审计、通知及数据库迁移 |
+| `src/views/` | Vue 页面 |
+| `src/features/` | 前端认证、权限、项目、审计、命令等领域逻辑 |
+| `src/components/` | 通用组件与登录页组件 |
+| `deploy/` | Dockerfile、Compose、Nginx 和部署说明 |
+| `requirements.txt` | Python 依赖 |
+| `package.json` | 前端依赖与脚本 |
+
+## 环境要求
+
+- Python 3.10+（部署镜像使用 Python 3.12）
+- Node.js 22+ 和 npm
+- 本地开发默认使用 SQLite；Docker 单机部署也使用 SQLite 持久化卷
+- 容器部署需要 Docker Engine 和 Docker Compose v2
+
+## 本地开发
+
+### 后端
+
+在项目根目录运行：
 
 ```powershell
+py -m venv .venv
+.\.venv\Scripts\Activate.ps1
 py -m pip install -r requirements.txt
 cd backend
 py manage.py migrate
 py manage.py runserver 127.0.0.1:8000
 ```
 
-`runserver` 由 Daphne/ASGI 提供服务，以支持命令执行页面的 WebSocket 实时输出。生产环境使用单 ASGI 进程时可沿用内存 Channel Layer；多进程部署需要配置 Redis Channel Layer。
+Django 开发服务通过 Daphne/ASGI 运行，以支持命令执行的 WebSocket 输出。首次访问登录流程会初始化开发管理员账号：`admin / admin123`。该账号仅供本地开发；上线前务必修改密码，并在生产环境设置独立的 `DJANGO_SECRET_KEY`。
 
-## 启动前端
+### 前端
+
+另开终端，在项目根目录运行：
 
 ```powershell
-npm install
+npm ci
 npm run dev
 ```
 
-前端默认地址为 `http://localhost:5173`，开发服务器会将 `/api` 请求代理到 Django。
+默认访问 `http://localhost:5173`。Vite 将 `/api` 和 `/ws` 请求代理到本地 Django 服务 `http://127.0.0.1:8000`。
 
-## API
+### 环境变量
 
-- `GET /api/health/`：服务健康状态
-- `GET /api/dashboard/`：节点、资源指标、监控曲线、服务和动态数据
-- `POST /api/auth/login/`：用户登录，返回 Token
-- `POST /api/auth/logout/`：退出当前 Token 会话
-- `GET /api/auth/me/`：获取当前用户
-- `GET/POST /api/users/`：管理员查询、新增用户
-- `PATCH/DELETE /api/users/:id/`：管理员编辑、启用/禁用、删除用户
-- `GET /api/permissions/`：超级管理员查询固定权限目录
-- `GET/POST /api/roles/`：超级管理员查询、新增角色
-- `PATCH/DELETE /api/roles/:id/`：超级管理员编辑、启用/禁用、删除角色
-- `GET /api/roles/:id/users/`：超级管理员查询角色成员
-- `GET /api/file-audits/`、`GET /api/file-audits/:id/`：分页查询文件变更审计及差异详情
-- `GET /api/operation-audits/`：分页查询系统关键操作审计
-- `GET/POST /api/accounts/`：账号列表、新增账号
-- `PATCH/DELETE /api/accounts/:id/`：编辑、删除账号
-- `GET/POST /api/file-configs/`：文件管理配置列表、新增配置（支持 `project_id`）
-- `PATCH/DELETE /api/file-configs/:id/`：编辑、删除文件管理配置
-- `POST /api/file-configs/:id/test-connection/`：测试 SSH 连接
-- `POST /api/file-configs/:id/refresh/`：通过 SSH 获取远程文件列表
-- `GET /api/file-lists/`：查询已获取的远程文件列表
-- `GET/POST /api/projects/`：查询、新增层级项目
-- `PATCH/DELETE /api/projects/:id/`：编辑、移动、排序或删除空项目
-- `POST /api/file-configs/:id/inspect/`：验证 SSH 并采集系统规格
-- `POST /api/file-configs/batch/`：批量移动或删除配置
-- `GET /api/file-configs/import-template/`、`POST /api/file-configs/import/`、`POST /api/file-configs/export/`：Excel 模板、预览确认导入和导出
+后端支持以下环境变量（本地开发均可选）：
 
-项目管理创建主机时不需要配置机器名称或文件路径，机器名称默认为空，由“验证并采集规格”自动读取远程主机名。Excel 模板同样无需填写这两项；导出的机器名称仅供查看，导入时不会恢复验证信息。原文件管理的路径配置继续用于文件列表获取，未配置路径的主机不能执行文件列表获取。
+| 变量 | 默认值 | 说明 |
+| --- | --- | --- |
+| `DJANGO_SECRET_KEY` | 开发用固定密钥 | Django 签名密钥，也用于加密 SSH 凭据；生产环境必须配置强随机值并妥善备份 |
+| `DJANGO_DEBUG` | `1` | Django 调试模式；生产环境设为 `0` |
+| `DJANGO_ALLOWED_HOSTS` | `*` | 逗号分隔的 Host 名称 |
+| `SQLITE_PATH` | `backend/db.sqlite3` | SQLite 数据库文件路径 |
+| `CSRF_TRUSTED_ORIGINS` | 空 | 逗号分隔的可信来源，包含协议和域名，例如 `https://filehub.example.com` |
+| `CORS_ALLOWED_ORIGINS` | 本地 Vite 地址 | 逗号分隔的跨域来源 |
 
-除 `POST /api/auth/login/` 外，其余 API 接口均需要在请求头携带
-`Authorization: Token <token>`。
+## 认证与权限
 
-业务接口同时校验角色权限。多个启用角色的权限取并集，停用角色不提供权限；超级管理员始终拥有全部权限。用户和角色管理仅允许超级管理员访问。
+- 登录先获取并完成服务端滑块挑战，再提交账号和密码。勾选“记住用户名”只会记住用户名，不保存密码。
+- 管理员可在用户管理中开启、关闭或重置某用户的 TOTP。开启/重置后，用户下次登录时必须完成首次绑定；启用后后续登录需要动态验证码。普通用户不能在个人设置中自行绑定或解绑。
+- 登录 Token 使用固定过期时间，默认 480 分钟，系统设置允许配置 1 至 43,200 分钟。会话不会因操作而滑动续期；过期的 API/WebSocket 请求会被拒绝并要求重新登录。
+- 权限按角色授权，多个启用角色的权限取并集。每个模块执行新增、编辑、删除、执行、导入或导出等操作权限时同时需要该模块的查看权限。
+- 权限模块包括概览、项目、SSH 账号、文件管理、文件列表、文件审计、操作审计、命令执行、系统设置、用户管理和角色管理。超级管理员拥有全部权限；普通权限管理员只能分配自身拥有的权限，且不能管理超级管理员或内置角色。
+- 系统级偏好由超级管理员维护。拥有 `settings.view` 的用户可查看设置并维护自己的个人资料。
 
-默认开发管理员：`admin / admin123`。生产环境请登录后立即修改密码。
+## API 参考
+
+API 根路径为 `/api/`。除登录、滑块挑战/校验和双因素登录验证外，接口使用 `Authorization: Token <token>` 请求头。受保护接口会根据当前数据库中的角色权限实时授权。
+
+| 路径 | 方法 | 用途 |
+| --- | --- | --- |
+| `/health/` | `GET` | 服务健康状态 |
+| `/auth/slider-challenge/` | `GET` | 获取登录滑块挑战 |
+| `/auth/slider-verify/` | `POST` | 校验滑块并获取登录用令牌 |
+| `/auth/login/` | `POST` | 用户名密码登录，可能返回 TOTP 绑定或验证挑战 |
+| `/auth/verify-two-factor/` | `POST` | 验证已绑定用户的 TOTP 并完成登录 |
+| `/auth/verify-two-factor-setup/` | `POST` | 确认管理员要求的首次 TOTP 绑定 |
+| `/auth/me/` | `GET` | 获取当前用户和有效权限 |
+| `/auth/logout/` | `POST` | 注销当前 Token |
+| `/auth/unlock/` | `POST` | 验证密码并解除屏幕锁定 |
+| `/dashboard/` | `GET` | 获取概览数据 |
+| `/projects/`、`/projects/:id/` | `GET`, `POST`, `PATCH`, `DELETE` | 项目层级及项目操作 |
+| `/accounts/`、`/accounts/:id/` | `GET`, `POST`, `PATCH`, `DELETE` | SSH 账号管理；`/accounts/options/` 提供选择项 |
+| `/file-configs/`、`/file-configs/:id/` | `GET`, `POST`, `PATCH`, `DELETE` | 主机/目录配置管理 |
+| `/file-configs/:id/test-connection/` | `POST` | 测试 SSH 连接 |
+| `/file-configs/:id/inspect/` | `POST` | 验证 SSH 并采集主机规格 |
+| `/file-configs/:id/refresh/` | `POST` | 刷新远程文件列表 |
+| `/file-configs/batch/` | `POST` | 批量移动或删除配置 |
+| `/file-configs/import-template/` | `GET` | 下载 Excel 导入模板 |
+| `/file-configs/import/`、`/file-configs/export/` | `POST` | 导入预览/确认与导出配置 |
+| `/file-lists/` | `GET` | 查询远程文件 |
+| `/file-lists/:id/` | `GET`, `PATCH` | 查看或更新远程文件内容 |
+| `/command-executions/`、`/command-executions/:id/` | `GET`, `POST` | 查询和创建命令执行记录 |
+| `/command-executions/options/` | `GET` | 获取可执行主机、文件等选项 |
+| `/command-executions/:id/stop/` | `POST` | 停止命令执行 |
+| `/ws/command-executions/:id/` | WebSocket | 实时接收命令输出（需有效 Token） |
+| `/file-audits/`、`/file-audits/:id/` | `GET` | 文件变更审计及差异详情 |
+| `/operation-audits/` | `GET` | 系统操作审计 |
+| `/notifications/` | `GET` | 查询当前用户通知 |
+| `/notifications/:id/read/`、`/notifications/read-all/` | `POST` | 标记单条或全部通知为已读 |
+| `/settings/` | `GET`, `PATCH` | 用户资料与系统偏好 |
+| `/appearance/` | `GET` | 获取当前界面偏好和水印信息 |
+| `/permissions/`、`/roles/`、`/roles/:id/` | `GET`, `POST`, `PATCH`, `DELETE` | 权限目录与角色管理 |
+| `/roles/:id/users/` | `GET` | 查询角色成员 |
+| `/users/`、`/users/:id/` | `GET`, `POST`, `PATCH`, `DELETE` | 用户管理 |
+| `/users/:id/two-factor/{enable,disable,reset}/` | `POST` | 管理员控制用户双因素认证 |
+
+## Docker 单机部署
+
+在仓库根目录复制环境变量示例：
+
+```powershell
+Copy-Item deploy/.env.example deploy/.env
+```
+
+编辑 `deploy/.env`，设置强随机 `DJANGO_SECRET_KEY`，并按部署域名调整 `DJANGO_ALLOWED_HOSTS`、`CSRF_TRUSTED_ORIGINS` 和 `FILEHUB_PORT`。然后启动：
+
+```powershell
+docker compose --env-file deploy/.env -f deploy/docker-compose.yaml up -d --build
+```
+
+默认访问 `http://localhost:8080`。Compose 启动后端时会自动迁移数据库、收集 Django Admin 静态资源并运行 Daphne；Nginx 统一代理前端、API、Admin、静态资源和 WebSocket。SQLite 数据保存在 `filehub_data` 命名卷中，静态文件保存在 `filehub_static` 卷中。
+
+查看状态和日志：
+
+```powershell
+docker compose --env-file deploy/.env -f deploy/docker-compose.yaml ps
+docker compose --env-file deploy/.env -f deploy/docker-compose.yaml logs -f
+```
+
+停止服务但保留数据：
+
+```powershell
+docker compose --env-file deploy/.env -f deploy/docker-compose.yaml down
+```
+
+删除命名卷会永久删除数据库数据，执行前请确保已有备份。更多配置、备份和 HTTPS 说明见 [`deploy/README.md`](deploy/README.md)。当前 Compose 方案面向单机单后端；多实例需迁移 PostgreSQL，并将 Channels 内存层改为 Redis。
+
+## 测试与构建
+
+```powershell
+# 前端单元测试及组件测试
+npm run test:run
+
+# 前端类型检查与生产构建
+npm run build
+
+# 后端测试（从仓库根目录）
+py backend/manage.py test dashboard
+
+# 后端配置与迁移检查
+py backend/manage.py check
+py backend/manage.py makemigrations --check --dry-run
+```
+
+## 安全与运维提示
+
+- 生产环境必须关闭 `DJANGO_DEBUG`，正确配置允许域名和 HTTPS 可信来源，并通过 HTTPS 访问。
+- `DJANGO_SECRET_KEY` 同时参与 SSH 凭据加密。丢失密钥会导致既有加密凭据无法解密；随意更换会造成同样影响。请限制 `.env` 文件权限并备份密钥。
+- 备份时同时保存 SQLite 数据库与对应密钥。Docker SQLite 数据位于 `filehub_data` 卷；容器重建不会清除该卷，`docker compose down -v` 会删除它。
+- 当前应用使用 SQLite 和 Channels 内存层，适合单机单后端。不要直接横向扩展 Daphne 容器，否则内存 Channel Layer 无法跨进程同步。
+- 文件导入、远程 SSH、Shell 命令及 K8s 命令均具有操作风险；只为可信用户分配相应权限，并确认目标主机和命令内容。
