@@ -6,8 +6,8 @@ services:
       - "8000"
     volumes:
       - ./config.yaml:/etc/filehub/config.yaml:ro
-      - filehub_data:/data
-      - filehub_static:/app/backend/staticfiles
+      - ./data/filehub_data:/data
+      - ./data/filehub_static:/app/backend/staticfiles
     healthcheck:
       test: ["CMD", "python", "-c", "import socket; socket.create_connection(('127.0.0.1', 8000), 3).close()"]
       interval: 30s
@@ -25,10 +25,5 @@ services:
       - "8080:80"
     volumes:
       - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
-      - filehub_static:/srv/filehub-static:ro
+      - ./data/filehub_static:/srv/filehub-static:ro
 
-volumes:
-  filehub_data:
-    name: filehub-data
-  filehub_static:
-    name: filehub-static
