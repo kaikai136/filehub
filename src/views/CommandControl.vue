@@ -19,7 +19,7 @@
     <el-table :data="filteredRules" class="admin-table" v-loading="loading" empty-text="暂无匹配的命令规则">
       <el-table-column label="命令名称" min-width="210"><template #default="{ row }"><el-input v-if="canEdit" v-model="row.command" maxlength="80" :disabled="saving" aria-label="命令名称" /><code v-else>{{ row.command }}</code></template></el-table-column>
       <el-table-column label="分类 / 拦截原因" min-width="190"><template #default="{ row }"><el-input v-if="canEdit" v-model="row.category" maxlength="80" :disabled="saving" aria-label="规则分类" /><span v-else>{{ row.category }}</span></template></el-table-column>
-      <el-table-column label="匹配方式" min-width="190"><template #default="{ row }"><el-select v-if="canEdit" v-model="row.match" :disabled="saving" aria-label="匹配方式"><el-option label="精确名称" value="exact" /><el-option label="名称前缀" value="prefix" /><el-option label="Python 数字版本" value="python_version" /></el-select><span v-else>{{ matchLabels[row.match] }}</span></template></el-table-column>
+      <el-table-column label="匹配方式" min-width="190"><template #default="{ row }"><el-select v-if="canEdit" v-model="row.match" :disabled="saving" aria-label="匹配方式"><el-option label="精确名称" value="exact" /><el-option label="名称前缀" value="prefix" /><el-option label="Python 数字版本" value="python_version" /></el-select><span v-else>{{ commandMatchLabel(row.match) }}</span></template></el-table-column>
       <el-table-column label="启用" width="100"><template #default="{ row }"><el-switch v-model="row.enabled" :disabled="!canEdit || saving" aria-label="启用规则" /></template></el-table-column>
     </el-table>
     <p class="policy-help">命令只填写名称，不填写参数或路径；绝对路径命令按文件名匹配。前缀示例：mkfs. 匹配 mkfs.ext4；Python 数字版本匹配 python、python3、python3.13。规则可停用，不提供删除；停用所有规则会削弱保护。</p>
@@ -31,13 +31,13 @@ import { computed, onMounted, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Check, Plus, Refresh, Search } from '@element-plus/icons-vue'
 import { api } from '../api'
+import { commandMatchLabel } from '../features/commands/control'
 
 type CommandRule = { command: string; category: string; match: 'exact' | 'prefix' | 'python_version'; enabled: boolean }
 type CommandPolicy = { rules: CommandRule[]; defaults: CommandRule[]; revision: number; updated_at: string; can_edit: boolean }
 const rules = ref<CommandRule[]>([]), defaults = ref<CommandRule[]>([])
 const revision = ref(0), canEdit = ref(false), loading = ref(true), saving = ref(false)
 const search = ref(''), errorMessage = ref(''), loadError = ref('')
-const matchLabels = { exact: '精确名称', prefix: '名称前缀', python_version: 'Python 数字版本' }
 const filteredRules = computed(() => rules.value.filter(rule => (rule.command + ' ' + rule.category).toLowerCase().includes(search.value.toLowerCase())))
 let savedRules = ''
 function applyPolicy(data: CommandPolicy) {
