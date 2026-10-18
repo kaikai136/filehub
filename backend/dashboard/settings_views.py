@@ -1,6 +1,6 @@
 from django.contrib.auth import update_session_auth_hash
 from django.db import transaction
-from rest_framework.authentication import TokenAuthentication
+from .authentication import ExpiryTokenAuthentication as TokenAuthentication
 from rest_framework.decorators import api_view, authentication_classes, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -31,6 +31,7 @@ def serialize_settings(setting, is_superuser=False):
         "watermark_rotation": setting.watermark_rotation,
         "file_audit_retention_days": setting.file_audit_retention_days,
         "operation_audit_retention_days": setting.operation_audit_retention_days,
+        "login_expiry_minutes": setting.login_expiry_minutes,
         "can_edit_global": is_superuser,
         "updated_at": setting.updated_at.isoformat(),
     }
@@ -120,6 +121,7 @@ def settings(request):
             "watermark_rotation": ("水印角度", -45, 45),
             "file_audit_retention_days": ("文件审计保留天数", 1, 3650),
             "operation_audit_retention_days": ("操作审计保留天数", 1, 3650),
+            "login_expiry_minutes": ("系统登录过期时间", 1, 43200),
         }
         values = {}
         for field, (label, minimum, maximum) in integer_rules.items():

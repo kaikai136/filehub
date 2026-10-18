@@ -1,9 +1,13 @@
+import asyncio
+from contextlib import suppress
+
 from channels.db import database_sync_to_async
 from channels.generic.websocket import AsyncJsonWebsocketConsumer
 
 from .command_execution import ensure_interrupted_executions_failed, execution_group
 from .models import CommandExecution
 from .permissions import has_permission
+from .ws_auth import user_from_token
 
 
 class CommandExecutionConsumer(AsyncJsonWebsocketConsumer):
@@ -15,9 +19,14 @@ class CommandExecutionConsumer(AsyncJsonWebsocketConsumer):
         self.group_name = execution_group(self.execution_id)
         await self.channel_layer.group_add(self.group_name, self.channel_name)
         await self.accept()
+        self.expiry_task = asyncio.create_task(self.watch_auth())
         await self.send_json({"type": "snapshot", "execution": await self.snapshot()})
 
     async def disconnect(self, close_code):
+        if hasattr(self, "expiry_task"):
+            self.expiry_task.cancel()
+            with suppress(asyncio.CancelledError):
+                await self.expiry_task
         if hasattr(self, "group_name"):
             await self.channel_layer.group_discard(self.group_name, self.channel_name)
 
@@ -26,7 +35,17 @@ class CommandExecutionConsumer(AsyncJsonWebsocketConsumer):
         return None
 
     async def execution_message(self, event):
+        if not await user_from_token(self.scope.get("auth_token", "")):
+            await self.close(code=4401)
+            return
         await self.send_json(event["payload"])
+
+    async def watch_auth(self):
+        while True:
+            await asyncio.sleep(1)
+            if not await user_from_token(self.scope.get("auth_token", "")):
+                await self.close(code=4401)
+                return
 
     @database_sync_to_async
     def can_view(self):

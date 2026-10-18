@@ -7,6 +7,14 @@
       <el-table-column prop="name" label="姓名" min-width="150" />
       <el-table-column label="状态" width="110"><template #default="{ row }"><el-tag effect="plain" :type="row.is_active ? 'success' : 'info'">{{ row.is_active ? '启用' : '禁用' }}</el-tag></template></el-table-column>
       <el-table-column label="最近登录时间" min-width="200"><template #default="{ row }">{{ row.last_login ? new Date(row.last_login).toLocaleString('zh-CN') : '从未登录' }}</template></el-table-column>
+      <el-table-column label="双因素认证" min-width="190"><template #default="{ row }">
+        <span v-if="row.two_factor_status === 'required'" class="two-factor-pending">待验证</span>
+        <template v-else>
+          <el-switch v-if="row.username !== 'admin' && row.id !== currentUser?.id" :model-value="row.two_factor_status === 'enabled'" inline-prompt active-text="开" inactive-text="关" :disabled="saving" @change="toggleTwoFactor(row)" />
+          <el-tag v-else :type="row.two_factor_status === 'enabled' ? 'success' : 'info'">{{ row.two_factor_status === 'enabled' ? '已启用' : '未启用' }}</el-tag>
+          <el-button v-if="row.two_factor_status === 'enabled' && row.username !== 'admin' && row.id !== currentUser?.id" text type="primary" :disabled="saving" @click="resetTwoFactor(row)">重置</el-button>
+        </template>
+      </template></el-table-column>
       <el-table-column label="操作" width="140"><template #default="{ row }"><div class="admin-actions">
         <el-tooltip content="编辑用户"><el-button text :icon="EditPen" aria-label="编辑用户" :disabled="saving" @click="openEdit(row)" /></el-tooltip>
         <el-tooltip :content="row.id === currentUser?.id ? '不能停用当前用户' : row.is_active ? '禁用用户' : '启用用户'"><span><el-button text :icon="row.is_active ? VideoPause : VideoPlay" :aria-label="row.is_active ? '禁用用户' : '启用用户'" :disabled="saving || row.id === currentUser?.id" @click="toggleUser(row)" /></span></el-tooltip>
@@ -46,6 +54,25 @@ async function saveUser() { if (saving.value || !await formRef.value?.validate()
 async function toggleUser(user: User) { if (saving.value) return; saving.value = true; try { await api.patch(`/users/${user.id}/`, { is_active: !user.is_active }); await load(); ElMessage.success('状态已更新') } catch (error: any) { ElMessage.error(error.response?.data?.detail || '更新失败') } finally { saving.value = false } }
 async function deleteUser(user: User) { try { await ElMessageBox.confirm(`确定删除用户“${user.username}”吗？删除后不可恢复。`, '删除用户', { type: 'warning' }) } catch { return }; saving.value = true; try { await api.delete(`/users/${user.id}/`); await load(); ElMessage.success('删除成功') } catch (error: any) { ElMessage.error(error.response?.data?.detail || '删除失败') } finally { saving.value = false } }
 function beforeClose(done: () => void) { if (!saving.value) done() }
+async function toggleTwoFactor(user: User) {
+  if (saving.value || user.username === 'admin' || user.id === currentUser.value?.id) return
+  const enabled = user.two_factor_status !== 'enabled'
+  saving.value = true
+  try {
+    await api.post(`/users/${user.id}/two-factor/${enabled ? 'enable' : 'disable'}/`)
+    ElMessage.success(enabled ? '已开启双因素认证，用户下次登录需要绑定' : '已关闭双因素认证')
+    await load()
+  } catch (error: any) { ElMessage.error(error.response?.data?.detail || '更新双因素认证失败') } finally { saving.value = false }
+}
+async function resetTwoFactor(user: User) {
+  try { await ElMessageBox.confirm(`重置“${user.username}”的双因素认证后，用户下次登录需要重新扫码绑定。当前登录会话不会被撤销。`, '重置双因素认证', { type: 'warning', confirmButtonText: '确认重置', cancelButtonText: '取消' }) } catch { return }
+  saving.value = true
+  try {
+    await api.post(`/users/${user.id}/two-factor/reset/`)
+    ElMessage.success('双因素认证已重置')
+    await load()
+  } catch (error: any) { ElMessage.error(error.response?.data?.detail || '重置失败') } finally { saving.value = false }
+}
 function resetForm() { Object.assign(form, defaults()); editing.value = null; nextTick(() => formRef.value?.clearValidate()) }
 onMounted(load)
 </script>

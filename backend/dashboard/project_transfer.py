@@ -5,7 +5,7 @@ from django.db import transaction
 from django.http import HttpResponse
 from openpyxl import Workbook, load_workbook
 from rest_framework.decorators import api_view, authentication_classes, permission_classes
-from rest_framework.authentication import TokenAuthentication
+from .authentication import ExpiryTokenAuthentication as TokenAuthentication
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.exceptions import ValidationError
 from rest_framework.response import Response

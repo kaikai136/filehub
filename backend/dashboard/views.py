@@ -9,12 +9,12 @@ from django.utils import timezone
 from rest_framework.exceptions import ValidationError
 from rest_framework.authtoken.models import Token
 from rest_framework.decorators import api_view, authentication_classes, permission_classes
-from rest_framework.authentication import TokenAuthentication
+from .authentication import ExpiryTokenAuthentication as TokenAuthentication
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework import status
 
-from .models import Account, FileConfig, OperationAudit, Project, RemoteFile
+from .models import Account, FileConfig, OperationAudit, Project, RemoteFile, UserTwoFactor
 from .audit import record_file_audit, record_operation_audit
 from .notifications import config_snapshot, record_config_notification
 from .permissions import role_permissions
@@ -29,6 +29,8 @@ UserModel = get_user_model()
 
 
 def serialize_user(user):
+    two_factor = UserTwoFactor.objects.filter(user=user).first()
+    two_factor_status = "enabled" if two_factor and two_factor.enabled else "required" if two_factor and two_factor.required else "disabled"
     return {
         "id": user.id,
         "username": user.username,
@@ -39,6 +41,9 @@ def serialize_user(user):
         "is_superuser": user.is_superuser,
         "date_joined": user.date_joined.isoformat(),
         "last_login": user.last_login.isoformat() if user.last_login else None,
+        "two_factor_enabled": two_factor_status == "enabled",
+        "two_factor_required": two_factor_status == "required",
+        "two_factor_status": two_factor_status,
         "roles": [{"id": role.id, "name": role.name, "code": role.code, "is_active": role.is_active} for role in user.roles.all()],
         "permissions": sorted(role_permissions(user)),
     }
@@ -124,22 +129,6 @@ def health(request):
     return Response({"status": "ok", "service": "ConfigHub API"})
 
 
-@api_view(["POST"])
-@permission_classes([AllowAny])
-def login(request):
-    username = str(request.data.get("username", "")).strip()
-    password = str(request.data.get("password", ""))
-    ensure_development_admin()
-    user = authenticate(request, username=username, password=password)
-    if not user:
-        return Response({"detail": "用户名或密码错误"}, status=status.HTTP_400_BAD_REQUEST)
-    if not user.is_active:
-        return Response({"detail": "该用户已被禁用"}, status=status.HTTP_403_FORBIDDEN)
-    token, _ = Token.objects.get_or_create(user=user)
-    update_last_login(None, user)
-    user.refresh_from_db(fields=["last_login"])
-    record_operation_audit(request, '认证', '登录', user.username, 'Token 登录成功', user=user)
-    return Response({"token": token.key, "user": serialize_user(user)})
 
 
 @api_view(["POST"])

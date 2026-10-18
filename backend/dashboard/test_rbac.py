@@ -3,7 +3,7 @@ from django.utils import timezone
 from rest_framework.authtoken.models import Token
 from rest_framework.test import APITestCase
 
-from .models import Account, FileConfig, Project, RemoteFile, Role
+from .models import Account, AuthChallenge, FileConfig, Project, RemoteFile, Role
 from .permissions import ALL_PERMISSIONS, READ_PERMISSIONS, role_permissions
 
 
@@ -117,7 +117,12 @@ class RbacTests(APITestCase):
     def test_token_login_updates_last_login_and_returns_roles_and_permissions(self):
         self.user.roles.add(self.viewer)
         before = timezone.now()
-        response = self.client.post('/api/auth/login/', {'username': self.user.username, 'password': 'secret123'}, format='json')
+        challenge = self.client.get('/api/auth/slider-challenge/').data
+        slider = AuthChallenge.objects.get(pk=challenge['challengeId'])
+        slider.payload['started'] -= 1
+        slider.save()
+        slider_token = self.client.post('/api/auth/slider-verify/', {'challengeId': challenge['challengeId'], 'offsetX': challenge['targetX'], 'elapsedMs': 700}).data['sliderToken']
+        response = self.client.post('/api/auth/login/', {'username': self.user.username, 'password': 'secret123', 'sliderToken': slider_token}, format='json')
         self.assertEqual(response.status_code, 200)
         self.user.refresh_from_db()
         self.assertGreaterEqual(self.user.last_login, before)

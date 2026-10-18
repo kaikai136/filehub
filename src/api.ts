@@ -3,6 +3,7 @@ import axios from 'axios'
 export const api = axios.create({ baseURL: '/api', timeout: 5000 })
 
 api.interceptors.request.use((config) => {
+  if (['/auth/login/', '/auth/slider-challenge/', '/auth/slider-verify/', '/auth/verify-two-factor/', '/auth/verify-two-factor-setup/'].includes(config.url || '')) return config
   const token = localStorage.getItem('confighub_token')
   if (token) config.headers.Authorization = `Token ${token}`
   return config
@@ -11,16 +12,18 @@ api.interceptors.request.use((config) => {
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error.response?.status === 401 && location.pathname !== '/login') {
-      localStorage.removeItem('confighub_token')
-      localStorage.removeItem('confighub_user')
-      location.href = '/login'
+    if (error.response?.status === 401) {
+      clearAuth()
+      if (location.pathname !== '/login') location.href = '/login?expired=1'
     }
     return Promise.reject(error)
   },
 )
 
 export interface User {
+  two_factor_enabled?: boolean
+  two_factor_required?: boolean
+  two_factor_status?: 'disabled' | 'required' | 'enabled'
   id: number
   username: string
   email: string
@@ -34,10 +37,18 @@ export interface User {
   permissions: string[]
 }
 
-export async function login(username: string, password: string) {
-  const response = await api.post<{ token: string; user: User }>('/auth/login/', { username, password })
-  localStorage.setItem('confighub_token', response.data.token)
-  localStorage.setItem('confighub_user', JSON.stringify(response.data.user))
+export interface LoginSuccess { token: string; user: User; expires_at: number }
+export interface TwoFactorChallenge { twoFactorRequired: true; challenge: string }
+export interface TwoFactorSetupChallenge { twoFactorSetupRequired: true; challenge: string; account: string; expiresIn: number; secret: string; otpauth_url: string; qr_data_url: string }
+
+export function storeAuth(data: LoginSuccess) {
+  localStorage.setItem('confighub_token', data.token)
+  localStorage.setItem('confighub_user', JSON.stringify(data.user))
+}
+
+export async function login(username: string, password: string, sliderToken: string) {
+  const response = await api.post<LoginSuccess | TwoFactorChallenge | TwoFactorSetupChallenge>('/auth/login/', { username, password, sliderToken })
+  if ('token' in response.data) storeAuth(response.data)
   return response.data
 }
 
@@ -56,6 +67,7 @@ export interface DashboardData {
 }
 
 export interface SystemSettings {
+  login_expiry_minutes: number
   font_size: 14 | 16 | 18
   watermark_enabled: boolean
   watermark_mode: 'username' | 'custom'

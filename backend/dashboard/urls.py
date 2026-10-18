@@ -4,6 +4,7 @@ from . import rbac_views
 from . import audit_views
 from . import settings_views
 from . import notification_views
+from . import auth_views
 from . import command_views
 from .views import (
     dashboard,
@@ -17,7 +18,6 @@ from .views import (
     file_content,
     file_lists,
     health,
-    login,
     logout,
     me,
     unlock,
@@ -26,6 +26,13 @@ from .views import (
 )
 
 urlpatterns = [
+    path('auth/slider-challenge/', auth_views.slider_challenge),
+    path('auth/slider-verify/', auth_views.slider_verify),
+    path('auth/verify-two-factor/', auth_views.verify_login),
+    path('auth/verify-two-factor-setup/', auth_views.verify_setup),
+    path('users/<int:user_id>/two-factor/enable/', auth_views.enable_two_factor),
+    path('users/<int:user_id>/two-factor/disable/', auth_views.disable_two_factor),
+    path('users/<int:user_id>/two-factor/reset/', auth_views.reset_two_factor),
     path('command-executions/options/', command_views.command_options),
     path('command-executions/', command_views.command_executions),
     path('command-executions/<int:execution_id>/', command_views.command_execution_detail),
@@ -50,7 +57,7 @@ urlpatterns = [
     path('file-configs/import/', project_transfer.import_configs),
     path('file-configs/export/', project_transfer.export_configs),
     path("health/", health, name="health"),
-    path("auth/login/", login, name="login"),
+    path("auth/login/", auth_views.login, name="login"),
     path("auth/logout/", logout, name="logout"),
     path("auth/unlock/", unlock, name="unlock"),
     path("auth/me/", me, name="me"),

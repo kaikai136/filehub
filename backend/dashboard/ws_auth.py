@@ -2,6 +2,7 @@ from urllib.parse import parse_qs
 
 from channels.db import database_sync_to_async
 from rest_framework.authtoken.models import Token
+from .authentication import token_expired
 
 
 @database_sync_to_async
@@ -11,6 +12,9 @@ def user_from_token(token_key):
     except Token.DoesNotExist:
         return None
     user = token.user
+    if token_expired(token):
+        token.delete()
+        return None
     return user if user.is_active else None
 
 
@@ -21,5 +25,6 @@ class TokenQueryAuthMiddleware:
     async def __call__(self, scope, receive, send):
         query = parse_qs(scope.get("query_string", b"").decode("utf-8"))
         token = query.get("token", [""])[0]
+        scope["auth_token"] = token
         scope["user"] = await user_from_token(token) if token else None
         return await self.app(scope, receive, send)

@@ -4,6 +4,28 @@ from django.conf import settings
 from django.db import models
 
 
+class UserTwoFactor(models.Model):
+    user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="two_factor")
+    enabled = models.BooleanField(default=False)
+    required = models.BooleanField(default=False)
+    encrypted_secret = models.TextField(blank=True, default="")
+    bound_at = models.DateTimeField(null=True, blank=True)
+    last_step = models.BigIntegerField(default=-1)
+
+
+class AuthChallenge(models.Model):
+    id = models.CharField(primary_key=True, max_length=64)
+    kind = models.CharField(max_length=20)
+    payload = models.JSONField(default=dict)
+    expires_at = models.DateTimeField()
+    attempts = models.PositiveSmallIntegerField(default=0)
+
+
+class LoginSession(models.Model):
+    token = models.OneToOneField("authtoken.Token", on_delete=models.CASCADE, related_name="login_session", primary_key=True)
+    expires_at = models.DateTimeField()
+
+
 class Role(models.Model):
     name = models.CharField(max_length=100, unique=True, verbose_name="角色名称")
     code = models.CharField(max_length=100, unique=True, verbose_name="角色标识")
@@ -190,6 +212,7 @@ class SystemSetting(models.Model):
     watermark_rotation = models.SmallIntegerField(default=-20)
     file_audit_retention_days = models.PositiveIntegerField(default=180)
     operation_audit_retention_days = models.PositiveIntegerField(default=180)
+    login_expiry_minutes = models.PositiveIntegerField(default=480)
     updated_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name="updated_system_settings")
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -309,4 +332,3 @@ class RemoteFile(models.Model):
 
     class Meta:
         ordering = ["relative_path"]
-

@@ -16,6 +16,11 @@
             <div class="settings-section-heading"><div><h2>界面偏好</h2><p>调整 FileHub 控制台的基础显示方式。</p></div></div>
             <el-form label-position="top" class="settings-form">
               <el-form-item label="系统字体大小"><el-radio-group v-model="form.settings.font_size" :disabled="!canEditGlobal"><el-radio-button :value="14">小</el-radio-button><el-radio-button :value="16">标准</el-radio-button><el-radio-button :value="18">大</el-radio-button></el-radio-group><small>修改后立即应用到当前页面。</small></el-form-item>
+              <h3>登录会话</h3>
+              <el-form-item label="系统登录过期时间">
+                <div class="expiry-controls"><el-input-number v-model="expiryValue" :min="1" :max="Math.floor(43200 / expiryFactors[expiryUnit])" :precision="0" :disabled="!canEditGlobal" /><el-select v-model="expiryUnit" style="width: 100px" :disabled="!canEditGlobal"><el-option value="minutes" label="分钟" /><el-option value="hours" label="小时" /><el-option value="days" label="天" /></el-select></div>
+                <small>过期后刷新需重新登录。按登录时间固定计时，操作不会续期；范围为 1 分钟至 30 天。</small>
+              </el-form-item>
             </el-form>
           </section>
 
@@ -53,6 +58,7 @@ import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Check, Document, Edit, Monitor, User } from '@element-plus/icons-vue'
 import ProfileForm from '../components/ProfileForm.vue'
+import { durationFromMinutes, durationToMinutes, expiryFactors, type ExpiryUnit } from '../features/auth/model'
 import { api, type SettingsResponse, type SystemSettings } from '../api'
 import { applySystemSettings } from '../composables/useSettings'
 import { authUser } from '../composables/useAuth'
@@ -62,8 +68,10 @@ const loading = ref(true)
 const saving = ref(false)
 const errorMessage = ref('')
 const activeSection = ref('interface')
+const expiryValue = ref<number | undefined>(8)
+const expiryUnit = ref<ExpiryUnit>('hours')
 const navItems = [{ key: 'interface', label: '界面偏好', icon: Monitor }, { key: 'profile', label: '用户信息', icon: User }, { key: 'watermark', label: '水印设置', icon: Edit }, { key: 'retention', label: '审计与日志', icon: Document }]
-const emptySettings: SystemSettings = { font_size: 16, watermark_enabled: false, watermark_mode: 'username', watermark_text: 'FileHub', watermark_opacity: 12, watermark_rotation: -20, file_audit_retention_days: 180, operation_audit_retention_days: 180, can_edit_global: false, updated_at: '' }
+const emptySettings: SystemSettings = { login_expiry_minutes: 480, font_size: 16, watermark_enabled: false, watermark_mode: 'username', watermark_text: 'FileHub', watermark_opacity: 12, watermark_rotation: -20, file_audit_retention_days: 180, operation_audit_retention_days: 180, can_edit_global: false, updated_at: '' }
 const form = reactive({ settings: { ...emptySettings }, user: createProfileForm() })
 const canEditGlobal = computed(() => form.settings.can_edit_global)
 const watermarkStyle = computed(() => ({ opacity: form.settings.watermark_opacity / 100, transform: `rotate(${form.settings.watermark_rotation}deg)` }))
@@ -75,6 +83,9 @@ async function load() {
   try {
     const { data } = await api.get<SettingsResponse>('/settings/')
     Object.assign(form.settings, data.settings)
+    const duration = durationFromMinutes(data.settings.login_expiry_minutes)
+    expiryValue.value = duration.value
+    expiryUnit.value = duration.unit
     Object.assign(form.user, createProfileForm(data.user))
     authUser.value = data.user
     applySystemSettings(data.settings)
@@ -85,6 +96,9 @@ async function load() {
 
 async function save() {
   if (saving.value) return
+  const minutes = durationToMinutes(expiryValue.value, expiryUnit.value)
+  if (canEditGlobal.value && minutes === null) { ElMessage.error('登录过期时间必须为 1 分钟至 30 天'); activeSection.value = 'interface'; return }
+  if (minutes !== null) form.settings.login_expiry_minutes = minutes
   const profileError = validateProfile(form.user)
   if (profileError) { ElMessage.error(profileError); activeSection.value = 'profile'; return }
   saving.value = true
@@ -102,3 +116,7 @@ async function save() {
 
 onMounted(load)
 </script>
+
+<style scoped>
+.expiry-controls { display: flex; flex-wrap: wrap; gap: 12px; width: 100%; }
+</style>
