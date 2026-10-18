@@ -1,0 +1,48 @@
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+ name: filehub.xunsiya.top
+ namespace: middleware
+spec:
+ dnsNames:
+   - filehub.xunsiya.top
+ issuerRef:
+   kind: ClusterIssuer
+   name: sencrypt-prod
+ secretName: filehub.xunsiya.top
+
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: filehub-ingress
+  namespace: middleware
+  annotations:
+    cert-manager.io/cluster-issuer: sencrypt-prod
+    nginx.ingress.kubernetes.io/enable-cors: "true"
+    nginx.ingress.kubernetes.io/cors-allow-methods: "GET, POST, OPTIONS"
+    nginx.ingress.kubernetes.io/cors-allow-headers: "Authorization, Content-Type"
+    nginx.ingress.kubernetes.io/cors-allow-credentials: "true"
+    nginx.ingress.kubernetes.io/cors-allow-origin: '*'
+    nginx.ingress.kubernetes.io/proxy-buffer-size: "16k" #缓冲区大小
+    nginx.ingress.kubernetes.io/proxy-buffers-number: "8" #缓冲区数据，不加它参数多时返回502
+
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - filehub.xunsiya.top
+      secretName: filehub.xunsiya.top
+  rules:
+    - host: filehub.xunsiya.top
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: devops-filehub-web
+                port:
+                  number: 80
+

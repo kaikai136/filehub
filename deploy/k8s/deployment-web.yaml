@@ -1,0 +1,70 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: devops-filehub-web
+  namespace: middleware
+  labels:
+    app: devops-filehub-web
+    component: filehub-web
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: devops-filehub-web
+      component: filehub-web
+  template:
+    metadata:
+      labels:
+        app: devops-filehub-web
+        component: filehub-web
+    spec:
+
+      containers:
+        - name: filehub-web
+          image: registry.cn-beijing.aliyuncs.com/kaikai136/filehub-frontend:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 80
+          volumeMounts:
+            - name: app-config
+              mountPath: /etc/nginx/conf.d/default.conf
+              subPath: nginx.conf
+              readOnly: true
+            - name: static
+              mountPath: /srv/filehub-static
+              readOnly: true
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 20
+            periodSeconds: 30
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+      volumes:
+
+        - name: static
+          hostPath:
+            path: /data/middleware/devops-filehub/static
+            type: DirectoryOrCreate
+
+        - name: app-config
+          configMap:
+            name: devops-filehub-config
+            items:
+              - key: nginx.conf
+                path: nginx.conf
