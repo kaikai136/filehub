@@ -1,167 +1,124 @@
 <template>
-  <main class="secure-login" :class="{ 'is-dark': appearance.dark, 'is-glass': appearance.layout === 'glass' }">
-    <div class="login-particles" aria-hidden="true"><i v-for="particle in 18" :key="particle" :style="{ left: (particle * 37 % 100) + '%', top: (particle * 23 % 100) + '%', animationDelay: particle * -.4 + 's' }"></i></div>
-    <nav class="login-controls" aria-label="登录页外观">
-      <button type="button" @click="appearance.layout = appearance.layout === 'characters' ? 'glass' : 'characters'">{{ appearance.layout === 'characters' ? '动感玻璃' : '角色布局' }}</button>
-      <button type="button" :aria-label="appearance.dark ? '切换明亮模式' : '切换暗黑模式'" @click="appearance.dark = !appearance.dark">{{ appearance.dark ? '☀ 明亮' : '☾ 暗黑' }}</button>
-    </nav>
-    <Transition name="welcome"><div v-if="welcomeVisible" class="login-welcome" role="status"><span class="welcome-emblem">F</span><h1>欢迎来到 FileHub</h1><p>您的安全运维工作空间</p></div></Transition>
-    <section class="secure-login-card" aria-label="FileHub 登录">
-      <div class="login-visual" aria-hidden="true">
-        <div v-if="appearance.layout === 'glass'" class="glass-orbits"><span></span><span></span><span></span><strong>FileHub</strong><small>安全连接 · 高效运维</small></div>
-        <LoginCharacters v-else :active="!welcomeVisible" :is-typing="isTyping" :show-password="showPassword" :password-length="password.length" />
-        <span class="visual-caption">FileHub · Secure Workspace</span>
+  <main class="lamp-login" :class="{ 'is-on': lampOn, burnt: burnout, finale: finale }" :style="lampStyle" @pointerdown="handleActivity">
+    <div class="stars" aria-hidden="true"></div>
+    <Transition name="fade"><div v-if="burnout" class="fireflies" aria-hidden="true"><span v-for="(fly, i) in fireflies" :key="i" :style="flyStyle(fly)"></span></div></Transition>
+    <header class="brand"><b>F</b><span><strong>FileHub</strong><small>安全运维工作空间</small></span></header>
+
+    <section class="login-stage" :class="{ 'with-card': showLoginCard }">
+      <div class="lamp-column">
+        <LampScene :lamp-on="lampOn" :lamp-state="lampState" :nudge="nudge" @toggle="requestLampToggle" />
+        <p>拉动灯绳或按 <kbd>L</kbd> 切换灯光</p>
       </div>
-      <div class="login-form-panel">
-        <div class="secure-badge">● FileHub · Secure Console</div>
-        <h1>{{ pendingSetup ? '绑定双因素认证' : pending ? '双因素认证' : '欢迎回来' }}</h1>
-        <p class="login-description">{{ pendingSetup ? '请使用验证器扫描二维码，然后输入 6 位动态验证码完成绑定。' : pending ? '请输入验证器中的 6 位动态验证码。' : '登录管理平台，继续处理文件、主机和系统管理任务。' }}</p>
-        <el-alert v-if="errorMessage" :title="errorMessage" type="error" :closable="false" show-icon />
-        <el-alert v-else-if="route.query.expired" title="登录已过期，请重新登录" type="info" :closable="false" show-icon />
-        <form v-if="!pending && !pendingSetup" class="secure-form" @submit.prevent="submit">
-          <el-input v-model="username" size="large" placeholder="用户名" aria-label="用户名" autocomplete="username" :prefix-icon="UserIcon" :disabled="loading" @focus="isTyping = true" @blur="isTyping = false" />
-          <el-input v-model="password" size="large" :type="showPassword ? 'text' : 'password'" placeholder="密码" aria-label="密码" autocomplete="current-password" :prefix-icon="Lock" :disabled="loading">
-            <template #suffix><button class="password-toggle" type="button" :aria-label="showPassword ? '隐藏密码' : '显示密码'" :aria-pressed="showPassword" @click="showPassword = !showPassword"><el-icon><Hide v-if="showPassword" /><View v-else /></el-icon></button></template>
+      <section v-if="showLoginCard" class="login-card" aria-label="FileHub 登录" @click="nudgeLamp">
+        <div class="card-line" aria-hidden="true"></div>
+        <header class="heading">
+          <span class="badge"><i></i> 安全连接</span>
+          <small>FILEHUB CONSOLE</small>
+          <h1>{{ heading }}</h1>
+          <p>{{ description }}</p>
+        </header>
+        <div v-if="errorMessage" class="notice error" role="alert"><el-icon><WarningFilled /></el-icon>{{ errorMessage }}</div>
+        <div v-else-if="route.query.expired" class="notice info" role="status"><el-icon><Clock /></el-icon>登录已过期，请重新登录</div>
+
+        <form v-if="!pending && !pendingSetup" class="login-form" @submit.prevent="submit">
+          <label for="login-username">用户名</label>
+          <el-input id="login-username" v-model="username" size="large" placeholder="请输入用户名" autocomplete="username" aria-label="用户名" :prefix-icon="UserIcon" :disabled="loading" @focus="wakeLamp" />
+          <label for="login-password">密码</label>
+          <el-input id="login-password" v-model="password" size="large" :type="showPassword ? 'text' : 'password'" placeholder="请输入密码" autocomplete="current-password" aria-label="密码" :prefix-icon="Lock" :disabled="loading" @focus="peekPassword" @input="peekPassword" @blur="stopPeeking">
+            <template #suffix><button class="password-toggle" type="button" :aria-label="showPassword ? '隐藏密码' : '显示密码'" @click.stop="showPassword = !showPassword"><el-icon><Hide v-if="showPassword" /><View v-else /></el-icon></button></template>
           </el-input>
-          <el-checkbox v-model="remember" :disabled="loading">记住我<span class="remember-note">（仅用户名）</span></el-checkbox>
+          <div class="form-options"><el-checkbox v-model="remember" :disabled="loading">记住用户名</el-checkbox><span>不会保存密码</span></div>
           <LoginSlider :reset-key="sliderResetKey" @verified="sliderToken = $event" />
-          <el-button class="secure-submit" type="primary" size="large" native-type="submit" :loading="loading" :disabled="!username.trim() || !password || !sliderToken">登　录</el-button>
+          <el-button class="submit" type="primary" size="large" native-type="submit" :loading="loading" :disabled="!username.trim() || !password || !sliderToken">进入 FileHub <el-icon v-if="!loading"><Right /></el-icon></el-button>
         </form>
-        <form v-else class="secure-form" @submit.prevent="pendingSetup ? submitTwoFactorSetup() : submitTwoFactor()">
-          <div v-if="pendingSetup" class="setup-qr-wrap"><img :src="pendingSetup.qr_data_url" alt="双因素认证绑定二维码" /><code>{{ pendingSetup.secret }}</code><small>绑定挑战将在 {{ pendingSetup.expiresIn }} 秒后过期。</small></div>
-          <el-input v-model="code" size="large" placeholder="6 位动态验证码" aria-label="动态验证码" inputmode="numeric" autocomplete="one-time-code" maxlength="6" :disabled="loading" />
-          <el-button class="secure-submit" type="primary" size="large" native-type="submit" :loading="loading" :disabled="!/^[0-9]{6}$/.test(code)">{{ pendingSetup ? '绑定并登录' : '验证并登录' }}</el-button>
-          <el-button text :disabled="loading" @click="cancelTwoFactor">返回账号登录</el-button>
+
+        <form v-else class="login-form" @submit.prevent="pendingSetup ? submitTwoFactorSetup() : submitTwoFactor()">
+          <div v-if="pendingSetup" class="setup-qr"><div><img :src="pendingSetup.qr_data_url" alt="双因素认证绑定二维码" /></div><span>无法扫码时输入密钥</span><code>{{ pendingSetup.secret }}</code><small>绑定请求将在 {{ pendingSetup.expiresIn }} 秒后过期</small></div>
+          <label for="two-factor-code">动态验证码</label>
+          <el-input id="two-factor-code" v-model="code" class="code" size="large" placeholder="000000" aria-label="6 位动态验证码" inputmode="numeric" autocomplete="one-time-code" maxlength="6" :disabled="loading" @input="normalizeCode" />
+          <el-button class="submit" type="primary" size="large" native-type="submit" :loading="loading" :disabled="!/^[0-9]{6}$/.test(code)">{{ pendingSetup ? '绑定并登录' : '验证并登录' }}</el-button>
+          <button class="back" type="button" :disabled="loading" @click="cancelTwoFactor"><el-icon><Back /></el-icon>返回账号登录</button>
         </form>
-        <footer class="secure-login-footer">FileHub 运维控制台 · 安全访问</footer>
-      </div>
+        <footer class="card-footer"><i></i>会话由 FileHub 安全策略保护<i></i></footer>
+      </section>
     </section>
+
+    <Transition name="banner"><div v-if="finale" class="finale"><strong>欢迎回来</strong><span>FILEHUB IS READY</span></div></Transition>
+    <div class="vignette" aria-hidden="true"></div><div class="grain" aria-hidden="true"></div>
+    <Transition name="toast"><div v-if="toast.visible" class="toast" :class="toast.type" role="status"><b>{{ toast.type === 'success' ? '✓' : '!' }}</b>{{ toast.message }}</div></Transition>
+    <footer class="room-footer"><span>{{ clock }}</span><i></i><span>{{ date }}</span><i></i><span>FileHub 运维控制台</span></footer>
   </main>
 </template>
 
 <script setup lang="ts">
-import { onBeforeUnmount, reactive, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { Lock, User as UserIcon, Hide, View } from '@element-plus/icons-vue'
+import { Back, Clock, Hide, Lock, Right, User as UserIcon, View, WarningFilled } from '@element-plus/icons-vue'
 import { api, login, storeAuth, type LoginSuccess, type TwoFactorChallenge, type TwoFactorSetupChallenge } from '../api'
 import { authUser } from '../composables/useAuth'
 import { landingPage } from '../features/access/model'
-import { normalizeAppearance, rememberedUsername, rememberUsername } from '../features/auth/model'
-import LoginCharacters from '../components/login/LoginCharacters.vue'
+import { rememberedUsername, rememberUsername } from '../features/auth/model'
+import LampScene from '../components/login/LampScene.vue'
 import LoginSlider from '../components/login/LoginSlider.vue'
 
-const router = useRouter(), route = useRoute()
-const username = ref(rememberedUsername(localStorage)), password = ref(''), remember = ref(Boolean(username.value))
-const showPassword = ref(false), isTyping = ref(false), loading = ref(false), errorMessage = ref('')
-const sliderToken = ref(''), sliderResetKey = ref(0), code = ref('')
-const pending = ref<TwoFactorChallenge | null>(null)
-const pendingSetup = ref<TwoFactorSetupChallenge | null>(null)
-let storedAppearance: unknown = null
-try { storedAppearance = JSON.parse(localStorage.getItem('filehub_login_appearance') || 'null') } catch { storedAppearance = null }
-const appearance = reactive(normalizeAppearance(storedAppearance))
-watch(appearance, value => localStorage.setItem('filehub_login_appearance', JSON.stringify(value)))
-const welcomeVisible = ref(!sessionStorage.getItem('filehub_login_welcomed'))
-const welcomeTimer = setTimeout(() => { welcomeVisible.value = false; sessionStorage.setItem('filehub_login_welcomed', '1') }, 1100)
-onBeforeUnmount(() => clearTimeout(welcomeTimer))
+type LampState = 'idle' | 'peek' | 'surprise' | 'annoyed' | 'happy' | 'sleepy' | 'burnt'
+type Firefly = { left: number; top: number; dx: number; dy: number; scale: number; duration: number; delay: number }
+const router = useRouter(); const route = useRoute()
+const username = ref(rememberedUsername(localStorage)); const password = ref(''); const remember = ref(Boolean(username.value))
+const showPassword = ref(false); const loading = ref(false); const errorMessage = ref(''); const sliderToken = ref(''); const sliderResetKey = ref(0); const code = ref('')
+const pending = ref<TwoFactorChallenge | null>(null); const pendingSetup = ref<TwoFactorSetupChallenge | null>(null)
+const lampOn = ref(false); const lampState = ref<LampState>('idle'); const lampLevel = ref(0); const lampHue = ref(42); const nudge = ref(0); const burnout = ref(false); const finale = ref(false); const failCount = ref(0); const fireflies = ref<Firefly[]>([])
+const toast = reactive<{ message: string; type: 'error' | 'success'; visible: boolean }>({ message: '', type: 'error', visible: false })
+const clock = ref(''); const date = ref(''); const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+let lastHue = 42; let lastActivity = 0; let pullTimes: number[] = []; let toastTimer: ReturnType<typeof setTimeout> | undefined; let idleTimer: ReturnType<typeof setTimeout> | undefined; let emotionTimer: ReturnType<typeof setTimeout> | undefined; let clockTimer: ReturnType<typeof setInterval> | undefined; let burnoutTimers: ReturnType<typeof setTimeout>[] = []
+const heading = computed(() => pendingSetup.value ? '绑定双因素认证' : pending.value ? '双因素认证' : '欢迎回来')
+const description = computed(() => pendingSetup.value ? '管理员已为账号启用双因素认证，请扫码并输入验证码完成首次绑定。' : pending.value ? '请输入验证器中当前显示的 6 位动态验证码。' : '登录管理平台，继续处理文件、主机和系统管理任务。')
+const showLoginCard = computed(() => lampOn.value || Boolean(pending.value || pendingSetup.value))
+const lampStyle = computed(() => ({ '--on': lampLevel.value, '--shade-hue': lampHue.value }))
+const flyStyle = (fly: Firefly) => ({ left: `${fly.left}%`, top: `${fly.top}%`, '--dx': `${fly.dx}px`, '--dy': `${fly.dy}px`, '--scale': fly.scale, animationDuration: `${fly.duration}s`, animationDelay: `${fly.delay}s` })
 
-async function complete(data: LoginSuccess) {
-  storeAuth(data)
-  authUser.value = data.user
-  rememberUsername(localStorage, username.value, remember.value)
-  password.value = ''
-  code.value = ''
-  await router.replace(landingPage(data.user))
-}
-
-async function submit() {
-  if (loading.value || !username.value.trim() || !password.value || !sliderToken.value) return
-  loading.value = true
-  errorMessage.value = ''
-  try {
-    const result = await login(username.value.trim(), password.value, sliderToken.value)
-    if ('twoFactorSetupRequired' in result) { pendingSetup.value = result; pending.value = null; code.value = '' }
-    else if ('twoFactorRequired' in result) { pending.value = result; pendingSetup.value = null; code.value = '' }
-    else await complete(result)
-  } catch (error: any) { errorMessage.value = error.response?.data?.detail || '登录失败，请稍后重试' }
-  finally { password.value = ''; showPassword.value = false; sliderToken.value = ''; sliderResetKey.value++; loading.value = false }
-}
-
-async function submitTwoFactor() {
-  if (loading.value || !pending.value || !/^[0-9]{6}$/.test(code.value)) return
-  loading.value = true
-  errorMessage.value = ''
-  try {
-    const { data } = await api.post<LoginSuccess>('/auth/verify-two-factor/', { challenge: pending.value.challenge, code: code.value })
-    await complete(data)
-  } catch (error: any) {
-    if (error.response?.data?.restart_login) cancelTwoFactor()
-    errorMessage.value = error.response?.data?.detail || '验证失败，请稍后重试'
-  } finally { code.value = ''; loading.value = false }
-}
-
-async function submitTwoFactorSetup() {
-  if (loading.value || !pendingSetup.value || !/^[0-9]{6}$/.test(code.value)) return
-  loading.value = true
-  errorMessage.value = ''
-  try {
-    const { data } = await api.post<LoginSuccess>('/auth/verify-two-factor-setup/', { challenge: pendingSetup.value.challenge, code: code.value })
-    await complete(data)
-  } catch (error: any) {
-    if (error.response?.data?.restart_login) cancelTwoFactor()
-    errorMessage.value = error.response?.data?.detail || '绑定失败，请稍后重试'
-  } finally { code.value = ''; loading.value = false }
-}
-
-function cancelTwoFactor() { pending.value = null; pendingSetup.value = null; password.value = ''; code.value = ''; sliderToken.value = ''; sliderResetKey.value++; errorMessage.value = '' }
+function tick() { const now = new Date(); clock.value = now.toLocaleTimeString('zh-CN', { hour12: false }); date.value = now.toLocaleDateString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit' }).replace(/\//g, '-') }
+function showToast(message: string, type: 'error' | 'success' = 'error') { toast.message = message; toast.type = type; toast.visible = true; clearTimeout(toastTimer); toastTimer = setTimeout(() => { toast.visible = false }, 2400) }
+function setLamp(on: boolean) { lampOn.value = on; lampLevel.value = on ? 1 : 0; if (on) { let hue = Math.floor(Math.random() * 360); if (Math.abs(hue - lastHue) < 60) hue = (hue + 120) % 360; lastHue = hue; lampHue.value = hue }; resetIdle() }
+function requestLampToggle() { if (burnout.value || finale.value) return; if (pending.value || pendingSetup.value) { setLamp(true); return }; const now = performance.now(); pullTimes = pullTimes.filter(t => now - t < 3200); pullTimes.push(now); if (pullTimes.length >= 5) return triggerBurnout(); if (lampState.value === 'sleepy') wakeLamp(); setLamp(!lampOn.value) }
+function triggerBurnout() { pullTimes = []; burnout.value = true; lampOn.value = false; lampLevel.value = 0; lampState.value = 'burnt'; fireflies.value = Array.from({ length: 12 }, () => ({ left: 6 + Math.random() * 88, top: 10 + Math.random() * 72, dx: (Math.random() * 2 - 1) * 140, dy: (Math.random() * 2 - 1) * 90, scale: .5 + Math.random() * .9, duration: 4 + Math.random() * 4, delay: Math.random() * 1.6 })); showToast('灯泡累坏了，正在更换'); burnoutTimers = [setTimeout(() => showToast('新灯泡马上装好'), 2600), setTimeout(() => { burnout.value = false; lampState.value = 'idle'; setLamp(true); showToast('灯光恢复，可以继续登录', 'success') }, 6200)] }
+function resetIdle() { clearTimeout(idleTimer); if (lampState.value === 'sleepy') { lampState.value = 'idle'; if (lampOn.value) lampLevel.value = 1 }; idleTimer = setTimeout(() => { if (lampOn.value && lampState.value === 'idle' && !burnout.value && !finale.value) { lampState.value = 'sleepy'; lampLevel.value = .42 } }, 18000) }
+function wakeLamp() { if (lampState.value === 'sleepy') lampState.value = 'idle'; if (lampOn.value) lampLevel.value = 1; resetIdle() }
+function handleActivity() { const now = Date.now(); if (now - lastActivity < 700) return; lastActivity = now; resetIdle() }
+function nudgeLamp() { if (!lampOn.value) nudge.value++ }
+function peekPassword() { wakeLamp(); if (lampState.value !== 'happy' && lampOn.value) lampState.value = 'peek' }
+function stopPeeking() { if (lampState.value === 'peek') lampState.value = 'idle' }
+function loginError(message: string) { if (!lampOn.value) setLamp(true); failCount.value++; lampState.value = failCount.value >= 3 ? 'annoyed' : 'surprise'; if (failCount.value >= 3) { lampHue.value = 15; setTimeout(() => { lampHue.value = lastHue }, 1800) }; showToast(message); clearTimeout(emotionTimer); emotionTimer = setTimeout(() => { if (lampState.value === 'surprise' || lampState.value === 'annoyed') lampState.value = 'idle' }, 2100) }
+async function complete(data: LoginSuccess) { storeAuth(data); authUser.value = data.user; rememberUsername(localStorage, username.value, remember.value); password.value = ''; code.value = ''; failCount.value = 0; if (!lampOn.value) setLamp(true); lampState.value = 'happy'; showToast('验证通过，正在进入 FileHub', 'success'); finale.value = true; if (!reducedMotion) await new Promise(resolve => setTimeout(resolve, 1250)); await router.replace(landingPage(data.user)) }
+async function submit() { if (loading.value || !username.value.trim() || !password.value || !sliderToken.value) return; loading.value = true; errorMessage.value = ''; wakeLamp(); try { const result = await login(username.value.trim(), password.value, sliderToken.value); if ('twoFactorSetupRequired' in result) { pendingSetup.value = result; pending.value = null; code.value = ''; setLamp(true) } else if ('twoFactorRequired' in result) { pending.value = result; pendingSetup.value = null; code.value = ''; setLamp(true) } else await complete(result) } catch (error: any) { errorMessage.value = error.response?.data?.detail || '登录失败，请稍后重试'; loginError(errorMessage.value) } finally { password.value = ''; showPassword.value = false; sliderToken.value = ''; sliderResetKey.value++; loading.value = false } }
+async function submitTwoFactor() { if (loading.value || !pending.value || !/^[0-9]{6}$/.test(code.value)) return; loading.value = true; errorMessage.value = ''; try { const { data } = await api.post<LoginSuccess>('/auth/verify-two-factor/', { challenge: pending.value.challenge, code: code.value }); await complete(data) } catch (error: any) { if (error.response?.data?.restart_login) cancelTwoFactor(); errorMessage.value = error.response?.data?.detail || '验证失败，请稍后重试'; loginError(errorMessage.value) } finally { code.value = ''; loading.value = false } }
+async function submitTwoFactorSetup() { if (loading.value || !pendingSetup.value || !/^[0-9]{6}$/.test(code.value)) return; loading.value = true; errorMessage.value = ''; try { const { data } = await api.post<LoginSuccess>('/auth/verify-two-factor-setup/', { challenge: pendingSetup.value.challenge, code: code.value }); await complete(data) } catch (error: any) { if (error.response?.data?.restart_login) cancelTwoFactor(); errorMessage.value = error.response?.data?.detail || '绑定失败，请稍后重试'; loginError(errorMessage.value) } finally { code.value = ''; loading.value = false } }
+function normalizeCode(value: string) { code.value = value.replace(/\D/g, '').slice(0, 6) }
+function cancelTwoFactor() { pending.value = null; pendingSetup.value = null; password.value = ''; code.value = ''; sliderToken.value = ''; sliderResetKey.value++; errorMessage.value = ''; lampState.value = 'idle'; setLamp(true) }
+function handleKeydown(event: KeyboardEvent) { if (event.repeat || event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) return; if (event.key === 'l' || event.key === 'L') requestLampToggle() }
+onMounted(() => { tick(); clockTimer = setInterval(tick, 1000); window.addEventListener('keydown', handleKeydown); window.addEventListener('keydown', handleActivity, true); window.addEventListener('pointermove', handleActivity, { passive: true }); resetIdle() })
+onBeforeUnmount(() => { clearInterval(clockTimer); clearTimeout(toastTimer); clearTimeout(idleTimer); clearTimeout(emotionTimer); burnoutTimers.forEach(clearTimeout); window.removeEventListener('keydown', handleKeydown); window.removeEventListener('keydown', handleActivity, true); window.removeEventListener('pointermove', handleActivity) })
 </script>
 
 <style scoped>
-.secure-login { --login-surface: #ffffff; --login-input: #f9fbff; --login-border: #d6dfec; --login-text: #34256a; --login-muted: #697b96; --el-color-primary: #953cff; position: relative; display: grid; place-items: center; min-height: 100dvh; padding: 60px 24px; overflow: hidden; color: var(--login-text); background: radial-gradient(ellipse at 90% 30%, #ede5ff99, transparent 55%), #f3f6f9; }
-.secure-login.is-dark { --login-surface: #211e35; --login-input: #28243d; --login-border: #49425f; --login-text: #efe8ff; --login-muted: #bbb1d2; background: radial-gradient(ellipse at 80% 30%, #56248666, transparent 60%), #151321; color-scheme: dark; }
-.secure-login-card { z-index: 1; width: min(960px, 100%); min-height: 590px; display: grid; grid-template-columns: 45% 55%; overflow: hidden; border-radius: 24px; border: 1px solid #ffffff66; background: var(--login-surface); box-shadow: 0 28px 42px -22px #26314966; }
-.login-visual { position: relative; overflow: hidden; min-height: 590px; background: linear-gradient(145deg, #a54aff, #6d0ed7 60%, #5c12b7); }
-.visual-caption { position: absolute; bottom: 24px; left: 0; right: 0; text-align: center; font-size: 11px; letter-spacing: 1.5px; color: #ffffffaa; }
-.login-form-panel { display: flex; flex-direction: column; justify-content: center; padding: 64px 15.8% 40px; text-align: center; background: radial-gradient(circle at 100% 100%, #b99aff13, transparent 70%); }
-.secure-badge { align-self: center; white-space: nowrap; border: 1px solid #bc8cff55; border-radius: 24px; padding: 6px 13px; color: #963cff; background: #bb8bff13; font-size: 11px; font-weight: 650; letter-spacing: 1px; box-shadow: 0 3px 12px #953cff0f; }
-.login-form-panel h1 { margin: 18px 0 10px; font-size: 30px; letter-spacing: -1px; color: var(--login-text); }
-.login-description { margin: 0 0 30px; font-size: 12px; line-height: 1.7; color: var(--login-muted); font-weight: 550; }
-.secure-form { display: grid; gap: 20px; margin-top: 4px; text-align: left; }
-.setup-qr-wrap { display: grid; justify-items: center; gap: 10px; color: var(--login-muted); text-align: center; }
-.setup-qr-wrap img { width: 190px; max-width: 100%; padding: 10px; border-radius: 10px; background: white; }
-.setup-qr-wrap code { padding: 8px 10px; color: var(--login-text); background: var(--login-input); overflow-wrap: anywhere; user-select: all; }
-.setup-qr-wrap small { font-size: 11px; }
-.secure-form :deep(.el-input__wrapper) { height: 48px; padding: 0 15px; border-radius: 13px; background: var(--login-input); box-shadow: 0 0 0 1px var(--login-border) inset; }
-.secure-form :deep(.el-input__inner) { color: var(--login-text); }
-.secure-form :deep(.el-input__prefix), .secure-form :deep(.el-checkbox__label) { color: var(--login-muted); }
-.secure-form :deep(.el-checkbox__inner) { background: var(--login-input); border-color: var(--login-border); border-radius: 5px; }
-.secure-form :deep(.el-checkbox__input.is-checked .el-checkbox__inner) { background: #953cff; border-color: #953cff; }
-.secure-form :deep(.el-checkbox) { height: 28px; }
-.remember-note { color: var(--login-muted); opacity: .65; font-size: 11px; }
-.password-toggle { display: grid; place-items: center; border: 0; padding: 4px; background: transparent; color: var(--login-muted); cursor: pointer; }
-.secure-submit { width: 100%; height: 50px; border-radius: 13px; border: 0; background: #953cff; box-shadow: 0 8px 24px #953cff33; font-weight: 600; }
-.secure-submit.is-disabled { background: #d9bbfa; color: white; opacity: .9; }
-.secure-login-footer { margin-top: 28px; font-size: 10px; color: var(--login-muted); opacity: .6; }
-.login-controls { position: absolute; z-index: 3; right: 24px; top: 18px; display: flex; gap: 8px; }
-.login-controls button { padding: 7px 11px; border-radius: 18px; border: 1px solid var(--login-border); background: var(--login-surface); color: var(--login-muted); font-size: 12px; cursor: pointer; }
-.login-particles { position: absolute; inset: 0; pointer-events: none; }
-.login-particles i { position: absolute; width: 6px; height: 6px; border-radius: 50%; background: #b784ff55; animation: float 6s ease-in-out infinite; }
-.is-glass .secure-login-card { border-color: #ffffff44; backdrop-filter: blur(24px); background: color-mix(in srgb, var(--login-surface) 75%, transparent); }
-.is-glass .login-visual { background: linear-gradient(145deg, #603caa, #292455); }
-.glass-orbits { position: absolute; inset: 0; display: flex; flex-direction: column; justify-content: center; align-items: center; color: white; }
-.glass-orbits strong { font-size: 48px; z-index: 1; letter-spacing: -2px; }
-.glass-orbits small { z-index: 1; margin-top: 12px; color: #ddd1ff; }
-.glass-orbits span { position: absolute; width: 270px; height: 270px; border: 1px solid #cdb0ff66; border-radius: 40%; animation: orbit 16s linear infinite; box-shadow: 0 0 70px #b78fff22; }
-.glass-orbits span:nth-child(2) { width: 330px; height: 330px; animation-direction: reverse; }
-.glass-orbits span:nth-child(3) { width: 200px; height: 200px; background: #b798ff22; animation-duration: 10s; }
-.login-welcome { position: fixed; z-index: 5; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; background: var(--login-surface); color: var(--login-text); pointer-events: none; }
-.welcome-emblem { display: grid; place-items: center; width: 70px; height: 70px; border-radius: 22px; color: white; background: linear-gradient(135deg, #b264ff, #6d1be4); font-size: 40px; box-shadow: 0 12px 36px #953cff44; animation: enter .65s ease both; }
-.login-welcome h1 { font-size: 26px; margin: 26px 0 6px; }
-.login-welcome p { font-size: 13px; color: var(--login-muted); }
-.welcome-leave-active { transition: opacity .4s, transform .4s; }
-.welcome-leave-to { opacity: 0; transform: scale(1.03); }
-@keyframes float { 50% { transform: translateY(-16px); } }
-@keyframes orbit { to { transform: rotate(360deg); } }
-@keyframes enter { from { opacity: 0; transform: translateY(15px) scale(.9); } }
-@media (max-width: 760px) { .secure-login-card { max-width: 450px; grid-template-columns: 1fr; min-height: 570px; } .login-visual { display: none; } .login-form-panel { padding: 48px 32px 32px; } .secure-login { padding: 72px 16px 24px; } }
-@media (prefers-reduced-motion: reduce) { .login-particles i, .glass-orbits span, .welcome-emblem { animation: none; } .welcome-leave-active { transition: none; } }
+@property --on { syntax: '<number>'; inherits: true; initial-value: 0; } @property --shade-hue { syntax: '<number>'; inherits: true; initial-value: 42; }
+.lamp-login { --bg:#090d14; --ink:#edf1f7; --ink-dim:#8a95aa; --line:#222b3b; --danger:#ff7668; --lamp-light:oklch(83% .17 var(--shade-hue)); --lamp-glow:oklch(72% .19 var(--shade-hue)); --lamp-deep:oklch(48% .13 var(--shade-hue)); --accent:color-mix(in oklab,var(--lamp-light) calc(var(--on)*100%),#566071); --accent-glow:color-mix(in oklab,var(--lamp-glow) calc(var(--on)*100%),#273142); --accent-deep:color-mix(in oklab,var(--lamp-deep) calc(var(--on)*100%),#1a2230); --card-bg:color-mix(in oklab,var(--accent-deep) 14%,#0e1522); --login-surface:var(--card-bg); --login-muted:var(--ink-dim); --login-accent:var(--accent); --login-input:#111a28; --login-border:#2a3547; position:relative; isolation:isolate; min-height:100dvh; overflow:hidden auto; color:var(--ink); background:radial-gradient(ellipse 58% 52% at 30% 38%,color-mix(in oklab,var(--accent-glow) calc(var(--on)*22%),transparent),transparent 72%),radial-gradient(circle at 50% 125%,#06090f,var(--bg) 64%); font-family:'Noto Sans SC','Microsoft YaHei',system-ui,sans-serif; transition:--on .9s ease,--shade-hue 1.4s ease; }
+.login-stage { position:relative; z-index:5; display:grid; grid-template-columns:minmax(340px,430px) minmax(390px,460px); align-items:center; justify-content:center; gap:clamp(34px,6vw,88px); width:min(1120px,100%); min-height:100dvh; margin:auto; padding:88px 30px 78px; }
+.login-stage:not(.with-card) { grid-template-columns:1fr; }
+.login-stage:not(.with-card) .lamp-column { grid-column:1; }
+.brand { position:fixed; z-index:8; top:25px; left:30px; display:flex; align-items:center; gap:12px; } .brand>b { display:grid; place-items:center; width:36px; height:36px; border:1px solid color-mix(in oklab,var(--accent) 45%,var(--line)); border-radius:7px; color:#0a0f17; background:var(--accent); box-shadow:0 0 calc(var(--on)*22px) var(--accent-glow); font:800 21px/1 Georgia,serif; } .brand>span { display:grid; gap:1px; } .brand strong { font-size:16px; } .brand small { color:var(--ink-dim); font-size:10px; letter-spacing:1px; }
+.lamp-column { display:grid; justify-items:center; } .lamp-column>p { margin:-16px 0 0; color:var(--ink-dim); font:12px ui-monospace,SFMono-Regular,Consolas,monospace; } .lamp-column kbd { display:inline-grid; place-items:center; min-width:23px; height:21px; margin:0 3px; border:1px solid var(--line); border-bottom-width:2px; border-radius:5px; color:var(--accent); background:#101722; }
+.login-card { position:relative; overflow:hidden; width:100%; padding:38px 40px 28px; border:1px solid color-mix(in oklab,var(--accent) calc(var(--on)*18%),var(--line)); border-radius:8px; background:color-mix(in oklab,var(--card-bg) 92%,transparent); box-shadow:0 28px 80px -28px #000,0 0 calc(var(--on)*36px) color-mix(in oklab,var(--accent-glow) 16%,transparent); backdrop-filter:blur(16px); transition:border-color .8s,background .8s,box-shadow .8s,opacity .5s,transform .5s; } .card-line { position:absolute; inset:0 0 auto; height:1px; background:linear-gradient(90deg,transparent,var(--accent),transparent); }
+.heading { text-align:left; } .heading .badge { float:right; display:inline-flex; align-items:center; gap:7px; padding:5px 9px; border:1px solid var(--line); border-radius:4px; color:var(--ink-dim); font-size:10px; } .badge i { width:6px; height:6px; border-radius:50%; background:#69d39b; box-shadow:0 0 8px #69d39b; } .heading>small { display:block; margin-bottom:12px; color:var(--accent); font:600 10px ui-monospace,SFMono-Regular,Consolas,monospace; letter-spacing:2px; } .heading h1 { margin:0 0 10px; font:700 29px/1.25 'Noto Serif SC','Songti SC',serif; } .heading p { min-height:42px; margin:0 0 23px; color:var(--ink-dim); font-size:12px; line-height:1.75; }
+.notice { display:flex; align-items:flex-start; gap:8px; margin:-8px 0 17px; padding:10px 12px; border:1px solid color-mix(in oklab,var(--danger) 42%,var(--line)); border-radius:6px; color:#ffc1bb; background:color-mix(in oklab,var(--danger) 8%,transparent); font-size:12px; line-height:1.5; } .notice.info { border-color:color-mix(in oklab,var(--accent) 30%,var(--line)); color:var(--accent); background:color-mix(in oklab,var(--accent) 6%,transparent); }
+.login-form { display:grid; gap:11px; text-align:left; } .login-form>label { margin:2px 0 -5px; color:#b8c1d1; font-size:11px; font-weight:600; } .login-form :deep(.el-input__wrapper) { height:45px; padding:0 14px; border-radius:6px; background:var(--login-input); box-shadow:0 0 0 1px var(--login-border) inset; } .login-form :deep(.el-input__wrapper.is-focus) { box-shadow:0 0 0 1px var(--accent) inset,0 0 18px color-mix(in oklab,var(--accent-glow) 12%,transparent); } .login-form :deep(.el-input__inner) { color:var(--ink); font-size:13px; } .login-form :deep(.el-input__inner::placeholder),.login-form :deep(.el-input__prefix) { color:#667389; }
+.password-toggle { display:grid; place-items:center; border:0; padding:5px; color:var(--ink-dim); background:transparent; cursor:pointer; } .form-options { display:flex; align-items:center; justify-content:space-between; min-height:26px; } .form-options>span { color:#657187; font-size:10px; } .login-form :deep(.el-checkbox__label) { color:var(--ink-dim); font-size:11px; } .login-form :deep(.el-checkbox__inner) { border-color:var(--login-border); background:var(--login-input); }
+.submit { width:100%; height:47px; margin-top:5px; border:1px solid color-mix(in oklab,var(--accent) 72%,#fff); border-radius:6px; color:#111722; background:var(--accent); box-shadow:0 10px 24px -13px var(--accent-glow); font-weight:750; } .submit.is-disabled { border-color:#344052; color:#717d90; background:#222c3a; opacity:.78; } .submit :deep(span) { display:inline-flex; align-items:center; gap:8px; }
+.card-footer { display:flex; align-items:center; gap:10px; margin-top:25px; color:#596579; font-size:9px; text-align:center; } .card-footer i { flex:1; height:1px; background:var(--line); } .setup-qr { display:grid; justify-items:center; gap:9px; margin-bottom:7px; color:var(--ink-dim); text-align:center; } .setup-qr>div { padding:8px; border:1px solid var(--login-border); border-radius:6px; background:#fff; } .setup-qr img { display:block; width:145px; height:145px; } .setup-qr span,.setup-qr small { font-size:10px; } .setup-qr code { width:100%; padding:8px; border:1px solid var(--login-border); border-radius:5px; color:var(--accent); background:var(--login-input); font-size:11px; overflow-wrap:anywhere; user-select:all; } .code :deep(.el-input__inner) { text-align:center; font:600 19px ui-monospace,SFMono-Regular,Consolas,monospace; letter-spacing:8px; } .back { display:inline-flex; align-items:center; justify-content:center; gap:6px; justify-self:center; border:0; padding:7px; color:var(--ink-dim); background:transparent; cursor:pointer; font-size:11px; }
+.stars,.vignette,.grain,.fireflies { position:fixed; inset:0; pointer-events:none; } .stars { z-index:0; opacity:calc(.58 - var(--on)*.3); background-image:radial-gradient(1px 1px at 22% 28%,#dfe6f6 50%,transparent 51%),radial-gradient(1px 1px at 68% 14%,#b9c4dd 50%,transparent 51%),radial-gradient(1.5px 1.5px at 84% 42%,#eef2fb 50%,transparent 51%),radial-gradient(1px 1px at 38% 66%,#aab6d0 50%,transparent 51%),radial-gradient(1px 1px at 8% 52%,#d4dcef 50%,transparent 51%); background-size:560px 560px,440px 440px,700px 700px,520px 520px,620px 620px; animation:twinkle 8s ease-in-out infinite; } .vignette { z-index:2; background:radial-gradient(ellipse 82% 78% at 50% 45%,transparent 52%,rgb(0 0 0 / 56%)); } .grain { z-index:3; opacity:.04; mix-blend-mode:overlay; background-image:url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="180" height="180"><filter id="n"><feTurbulence type="fractalNoise" baseFrequency="0.85" numOctaves="2" stitchTiles="stitch"/></filter><rect width="100%" height="100%" filter="url(%23n)"/></svg>'); }
+.fireflies { z-index:7; } .fireflies span { position:absolute; width:5px; height:5px; border-radius:50%; background:#e4f8b0; box-shadow:0 0 12px 3px rgb(196 240 130 / 75%); animation:firefly ease-in-out infinite alternate; } .toast { position:fixed; z-index:30; top:28px; left:50%; display:flex; align-items:center; gap:10px; max-width:calc(100vw - 32px); padding:11px 18px; transform:translateX(-50%); border:1px solid var(--danger); border-radius:6px; color:var(--ink); background:color-mix(in oklab,var(--card-bg) 90%,var(--danger) 10%); box-shadow:0 12px 32px #0009; font-size:12px; backdrop-filter:blur(10px); } .toast b { display:grid; place-items:center; width:18px; height:18px; border-radius:50%; color:#111722; background:var(--danger); } .toast.success { border-color:var(--accent); } .toast.success b { background:var(--accent); }
+.finale { position:fixed; z-index:40; inset:0; display:grid; place-content:center; text-align:center; pointer-events:none; background:rgb(7 11 17 / 72%); backdrop-filter:blur(8px); } .finale strong { margin-bottom:15px; color:var(--ink); font:900 clamp(34px,6vw,52px) 'Noto Serif SC','Songti SC',serif; letter-spacing:6px; text-shadow:0 0 34px var(--accent-glow); } .finale span { color:var(--accent); font:11px ui-monospace,SFMono-Regular,Consolas,monospace; letter-spacing:6px; } .finale~.vignette { opacity:.2; } .room-footer { position:fixed; z-index:6; right:28px; bottom:20px; display:flex; align-items:center; gap:10px; color:#69758a; font:10px ui-monospace,SFMono-Regular,Consolas,monospace; } .room-footer i { width:4px; height:4px; border-radius:50%; background:var(--accent); } .fade-enter-active,.fade-leave-active { transition:opacity .8s; } .fade-enter-from,.fade-leave-to { opacity:0; } .toast-enter-active,.toast-leave-active { transition:opacity .25s,transform .3s; } .toast-enter-from,.toast-leave-to { opacity:0; transform:translate(-50%,-12px); } .banner-enter-active { transition:opacity .75s,transform .75s; } .banner-enter-from { opacity:0; transform:translateY(18px) scale(.97); } @keyframes twinkle { 50% { filter:brightness(.55); } } @keyframes firefly { 0% { transform:translate(0) scale(var(--scale)); opacity:0; } 18% { opacity:1; } 48% { opacity:.25; } 72% { opacity:.95; } 100% { transform:translate(var(--dx),var(--dy)) scale(var(--scale)); opacity:.1; } }
+@media (max-width:920px) { .login-stage { grid-template-columns:1fr; gap:0; min-height:auto; max-width:540px; padding:64px 18px 72px; } .lamp-column { height:300px; overflow:visible; } .lamp-column :deep(.lamp-area) { width:260px; height:340px; transform:translateY(-30px); } .lamp-column>p { display:none; } .login-card { padding:31px 28px 24px; } .brand { position:absolute; top:18px; left:20px; } .room-footer { position:relative; right:auto; bottom:auto; justify-content:center; padding:0 16px 20px; } }
+@media (max-width:480px) { .login-stage { padding-inline:14px; } .lamp-column { height:265px; } .lamp-column :deep(.lamp-area) { width:225px; height:294px; } .login-card { padding:27px 22px 22px; } .heading .badge { display:none; } .heading h1 { font-size:25px; } .heading p { min-height:0; } .room-footer span:nth-of-type(2),.room-footer i:nth-of-type(2) { display:none; } }
+@media (prefers-reduced-motion:reduce) { .lamp-login,.stars,.fireflies span,.login-card,.finale,.toast { animation:none!important; transition-duration:.01ms!important; } }
 </style>

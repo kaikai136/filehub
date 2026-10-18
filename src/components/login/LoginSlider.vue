@@ -99,11 +99,11 @@ onBeforeUnmount(() => { generation++; observer?.disconnect(); clearTimeout(expir
 <style scoped>
 .verify-track { position: relative; height: 44px; border: 1px solid var(--login-border, #d8dfee); border-radius: 12px; background: var(--login-input, #f9fbff); overflow: hidden; user-select: none; }
 .verify-caption { position: absolute; inset: 0; display: grid; place-items: center; color: var(--login-muted, #64748b); font-size: 13px; }
-.verify-target { position: absolute; top: 0; bottom: 0; width: 12px; margin-left: -6px; border-radius: 4px; border: 4px solid #e9d8ff; background: #953cff; }
-.verify-handle { position: absolute; left: 0; top: 0; height: 42px; width: 40px; padding: 0; border: 1px solid var(--login-border, #d8dfee); border-radius: 50%; color: #8a2eff; background: var(--login-surface, white); box-shadow: 0 2px 8px #53678422; cursor: grab; font-size: 26px; touch-action: none; }
-.verify-handle:focus-visible { outline: 2px solid #953cff; outline-offset: -3px; }
+.verify-target { position: absolute; top: 0; bottom: 0; width: 12px; margin-left: -6px; border-radius: 4px; border: 4px solid color-mix(in srgb, var(--login-accent, #953cff) 25%, white); background: var(--login-accent, #953cff); }
+.verify-handle { position: absolute; left: 0; top: 0; height: 42px; width: 40px; padding: 0; border: 1px solid var(--login-border, #d8dfee); border-radius: 50%; color: var(--login-accent, #8a2eff); background: var(--login-surface, white); box-shadow: 0 2px 8px #53678422; cursor: grab; font-size: 26px; touch-action: none; }
+.verify-handle:focus-visible { outline: 2px solid var(--login-accent, #953cff); outline-offset: -3px; }
 .dragging .verify-handle { cursor: grabbing; }
 .verified { border-color: #63bd96; }
 .verified .verify-caption, .verified .verify-handle { color: #24815a; }
-.verify-retry { position: absolute; right: 10px; top: 12px; border: 0; background: transparent; color: #953cff; cursor: pointer; }
+.verify-retry { position: absolute; right: 10px; top: 12px; border: 0; background: transparent; color: var(--login-accent, #953cff); cursor: pointer; }
 </style>
