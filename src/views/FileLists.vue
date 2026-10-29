@@ -309,9 +309,11 @@ onMounted(loadFiles)
 .file-editor-heading strong, .file-editor-heading small { display: block; }
 .file-editor-heading strong { color: #24364d; font-size: 16px; }
 .file-editor-heading small { margin-top: 5px; color: #8995a5; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.file-editor-body { min-height: 420px; }
-.file-editor-dialog :deep(.el-dialog__body) { padding: 8px 20px 12px; }
-.file-editor-dialog :deep(.el-dialog__footer) { display: flex; align-items: center; justify-content: flex-end; gap: 10px; }
+.file-editor-body { min-height: 440px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden; }
+.file-editor-dialog :deep(.el-dialog) { max-width: 1480px; border-radius: 10px; overflow: hidden; }
+.file-editor-dialog :deep(.el-dialog__header) { margin-right: 0; padding: 18px 22px 14px; border-bottom: 1px solid #edf1f6; }
+.file-editor-dialog :deep(.el-dialog__body) { padding: 14px 20px 16px; }
+.file-editor-dialog :deep(.el-dialog__footer) { display: flex; align-items: center; justify-content: flex-end; gap: 10px; padding: 12px 20px 16px; border-top: 1px solid #edf1f6; }
 .editor-shortcut { margin-right: auto; color: #8b96a6; font-size: 12px; }
 @media (max-width: 1100px) { .file-browser { grid-template-columns: 240px minmax(0, 1fr); gap: 12px; } }
 @media (max-width: 760px) { .file-browser { grid-template-columns: minmax(0, 1fr); } .folder-tree-scroll { min-height: 100px; max-height: 260px; } .folder-content { min-height: 420px; } }

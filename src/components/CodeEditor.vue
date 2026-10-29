@@ -85,11 +85,17 @@ onMounted(() => {
           if (update.docChanged) emit('update:modelValue', update.state.doc.toString())
         }),
         EditorView.theme({
-          '&': { height: 'min(64vh, 720px)', minHeight: '420px', fontSize: '13px', backgroundColor: '#ffffff' },
-          '.cm-scroller': { overflow: 'auto', fontFamily: 'Consolas, "Cascadia Code", "SFMono-Regular", monospace', lineHeight: '1.6' },
-          '.cm-gutters': { backgroundColor: '#f7f9fc', color: '#8b98aa', borderRight: '1px solid #e5eaf2' },
-          '.cm-activeLine, .cm-activeLineGutter': { backgroundColor: '#eef5ff' },
-          '&.cm-focused': { outline: 'none' },
+          '&': { height: 'min(68vh, 760px)', minHeight: '440px', fontSize: '13px', backgroundColor: '#ffffff', color: '#27364a' },
+          '.cm-scroller': { overflow: 'auto', fontFamily: 'Consolas, "Cascadia Code", "SFMono-Regular", monospace', lineHeight: '1.65', padding: '8px 0' },
+          '.cm-content': { caretColor: '#2563eb', padding: '0 12px 0 8px' },
+          '.cm-gutters': { backgroundColor: '#f8fafc', color: '#94a3b8', borderRight: '1px solid #e2e8f0', minWidth: '44px' },
+          '.cm-lineNumbers .cm-gutterElement': { padding: '0 10px 0 8px' },
+          '.cm-activeLine, .cm-activeLineGutter': { backgroundColor: '#f5f8fc' },
+          '.cm-selectionBackground': { backgroundColor: '#b7d2ff !important', opacity: '1 !important' },
+          '&.cm-focused .cm-selectionBackground': { backgroundColor: '#a9caff !important', opacity: '1 !important' },
+          '.cm-content ::selection': { backgroundColor: '#a9caff !important', color: '#172b4d' },
+          '.cm-cursor, .cm-dropCursor': { borderLeftColor: '#2563eb', borderLeftWidth: '2px' },
+          '&.cm-focused': { outline: 'none', boxShadow: 'inset 0 0 0 1px #93b4ef' },
         }),
       ],
     }),
@@ -108,4 +114,7 @@ onBeforeUnmount(() => view?.destroy())
 
 <style scoped>
 .code-editor { overflow: hidden; border: 1px solid #d8e0eb; border-radius: 8px; }
+.code-editor :deep(.cm-editor .cm-selectionBackground) { background: #b7d2ff !important; opacity: 1 !important; }
+.code-editor :deep(.cm-editor.cm-focused .cm-selectionBackground) { background: #9fc3ff !important; opacity: 1 !important; }
+.code-editor :deep(.cm-editor .cm-content ::selection) { background: #9fc3ff !important; color: #172b4d; }
 </style>
