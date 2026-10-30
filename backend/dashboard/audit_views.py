@@ -1,7 +1,9 @@
 from django.core.paginator import EmptyPage, Paginator
 from django.db.models import Q
 from datetime import datetime, time
+import re
 
+from django.db import transaction
 from django.utils import timezone
 from django.utils.dateparse import parse_date, parse_datetime
 from .authentication import ExpiryTokenAuthentication as TokenAuthentication
@@ -77,6 +79,32 @@ def serialize_operation_audit(record):
     }
 
 
+def _delete_ids(request):
+    ids = request.data.get('ids') if isinstance(request.data, dict) else None
+    if not isinstance(ids, list) or not 1 <= len(ids) <= 100:
+        raise ValidationError({'ids': '请选择 1 到 100 条有效记录'})
+    if any(isinstance(value, bool) or not isinstance(value, (int, str)) or (not re.fullmatch(r'[1-9][0-9]{0,18}', str(value)) or int(value) > 9223372036854775807) for value in ids):
+        raise ValidationError({'ids': '记录 ID 必须是正整数'})
+    return list(dict.fromkeys(int(value) for value in ids))
+
+
+def _bulk_delete(request, model):
+    ids = _delete_ids(request)
+    with transaction.atomic():
+        queryset = model.objects.filter(pk__in=ids)
+        deleted_count = queryset.count()
+        queryset.delete()
+    return Response({'deleted_count': deleted_count})
+
+
+def _clear_audits(model):
+    with transaction.atomic():
+        queryset = model.objects.all()
+        deleted_count = queryset.count()
+        queryset.delete()
+    return Response({'deleted_count': deleted_count})
+
+
 @api_view(['GET'])
 @authentication_classes([TokenAuthentication])
 @permission_classes([IsAuthenticated])
@@ -110,6 +138,24 @@ def file_audit_detail(request, audit_id):
     return Response(serialize_file_audit(record, include_diff=True))
 
 
+@api_view(['POST'])
+@authentication_classes([TokenAuthentication])
+@permission_classes([IsAuthenticated])
+@require_permission('file_audit.view')
+@require_permission('file_audit.delete')
+def file_audits_bulk_delete(request):
+    return _bulk_delete(request, FileAudit)
+
+
+@api_view(['POST'])
+@authentication_classes([TokenAuthentication])
+@permission_classes([IsAuthenticated])
+@require_permission('file_audit.view')
+@require_permission('file_audit.delete')
+def file_audits_clear(request):
+    return _clear_audits(FileAudit)
+
+
 @api_view(['GET'])
 @authentication_classes([TokenAuthentication])
 @permission_classes([IsAuthenticated])
@@ -129,3 +175,21 @@ def operation_audits(request):
     if keyword:
         queryset = queryset.filter(Q(object_name__icontains=keyword) | Q(detail__icontains=keyword))
     return _pagination(request, queryset, serialize_operation_audit)
+
+
+@api_view(['POST'])
+@authentication_classes([TokenAuthentication])
+@permission_classes([IsAuthenticated])
+@require_permission('operation_audit.view')
+@require_permission('operation_audit.delete')
+def operation_audits_bulk_delete(request):
+    return _bulk_delete(request, OperationAudit)
+
+
+@api_view(['POST'])
+@authentication_classes([TokenAuthentication])
+@permission_classes([IsAuthenticated])
+@require_permission('operation_audit.view')
+@require_permission('operation_audit.delete')
+def operation_audits_clear(request):
+    return _clear_audits(OperationAudit)

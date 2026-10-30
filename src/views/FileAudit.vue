@@ -9,9 +9,12 @@
       <el-input v-model="filters.operator" placeholder="操作人" clearable @keyup.enter="search" />
       <el-button type="primary" :icon="Search" @click="search" class="icon-primary">查询</el-button>
       <el-button @click="reset">重置</el-button>
+      <el-button v-if="canDelete" type="danger" :disabled="!selectedIds.length || loading || actionLoading" @click="bulkDelete">删除所选{{ selectedIds.length ? ` (${selectedIds.length})` : '' }}</el-button>
+      <el-button v-if="canDelete" type="danger" plain :disabled="loading || actionLoading" :loading="actionLoading" @click="clearAll">一键清空</el-button>
     </div>
     <el-alert v-if="error" :title="error" type="error" :closable="false" />
-    <el-table :data="records" class="admin-table" v-loading="loading" empty-text="暂无文件审计记录">
+    <el-table ref="tableRef" :data="records" row-key="id" class="admin-table" v-loading="loading" empty-text="暂无文件审计记录" @selection-change="onSelectionChange">
+      <el-table-column v-if="canDelete" type="selection" reserve-selection width="52" />
       <el-table-column prop="project_name" label="项目名" min-width="150" show-overflow-tooltip />
       <el-table-column prop="ip_address" label="IP 地址" min-width="140" />
       <el-table-column prop="directory" label="文件目录" min-width="280" show-overflow-tooltip />
@@ -32,9 +35,10 @@
 
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox, type ElTable } from 'element-plus'
 import { Refresh, Search, View } from '@element-plus/icons-vue'
 import { api } from '../api'
+import { hasPermission } from '../composables/useAuth'
 import { auditQuery, parseUnifiedDiff } from '../features/audit/model'
 
 type Operator = { id: number | null; username: string; name: string }
@@ -43,11 +47,17 @@ type PageResult<T> = { count: number; page: number; page_size: number; results: 
 const records = ref<FileAudit[]>([]), total = ref(0), page = ref(1), pageSize = ref(20), loading = ref(false), error = ref('')
 const filters = reactive({ time: [] as string[], project: '', ip: '', directory: '', operator: '' })
 const selected = ref<FileAudit | null>(null), diffVisible = ref(false), detailLoading = ref(false)
+const selectedIds = ref<number[]>([]), actionLoading = ref(false), tableRef = ref<InstanceType<typeof ElTable>>()
+const canDelete = computed(() => hasPermission('file_audit.view') && hasPermission('file_audit.delete'))
 const diffLines = computed(() => parseUnifiedDiff(selected.value?.diff || ''))
 async function load() { loading.value = true; error.value = ''; try { const { data } = await api.get<PageResult<FileAudit>>('/file-audits/', { params: auditQuery(filters, page.value, pageSize.value) }); records.value = data.results; total.value = data.count } catch (e: any) { error.value = e.response?.data?.detail || '加载文件审计失败' } finally { loading.value = false } }
 function search() { page.value = 1; void load() }
 function reset() { Object.assign(filters, { time: [], project: '', ip: '', directory: '', operator: '' }); search() }
 async function showDiff(record: FileAudit) { selected.value = { ...record }; diffVisible.value = true; detailLoading.value = true; try { selected.value = (await api.get<FileAudit>(`/file-audits/${record.id}/`)).data } catch (e: any) { ElMessage.error(e.response?.data?.detail || '加载文件差异失败'); diffVisible.value = false } finally { detailLoading.value = false } }
+function onSelectionChange(rows: FileAudit[]) { selectedIds.value = [...new Set(rows.map(row => row.id))] }
+async function bulkDelete() { if (!canDelete.value || loading.value || actionLoading.value || !selectedIds.value.length) return; actionLoading.value = true; const ids = [...selectedIds.value]; try { await ElMessageBox.confirm(`确定删除选中的 ${ids.length} 条文件审计记录吗？（包含其他分页及查询条件下的已选记录）`, '删除确认', { type: 'warning', confirmButtonText: '删除', cancelButtonText: '取消' }); let deletedCount = 0; for (let offset = 0; offset < ids.length; offset += 100) { const batch = ids.slice(offset, offset + 100); const { data } = await api.post('/file-audits/bulk-delete/', { ids: batch }); deletedCount += data.deleted_count; const completed = new Set(batch); for (const row of tableRef.value?.getSelectionRows() || []) if (completed.has(row.id)) tableRef.value?.toggleRowSelection(row, false); selectedIds.value = selectedIds.value.filter(id => !completed.has(id)) } ElMessage.success(`已删除 ${deletedCount} 条记录`); await reloadAfterDelete() } catch (e: any) { if (e !== 'cancel' && e !== 'close') ElMessage.error(e.response?.data?.detail || '删除文件审计失败') } finally { actionLoading.value = false } }
+async function clearAll() { if (!canDelete.value || loading.value || actionLoading.value) return; actionLoading.value = true; try { await ElMessageBox.confirm('将删除全部文件审计记录，不受筛选和分页限制，无法恢复。确定继续吗？', '一键清空确认', { type: 'warning', confirmButtonText: '全部清空', cancelButtonText: '取消' }); const { data } = await api.post('/file-audits/clear/'); ElMessage.success(`已清空 ${data.deleted_count} 条记录`); tableRef.value?.clearSelection(); selectedIds.value = []; page.value = 1; await reloadAfterDelete() } catch (e: any) { if (e !== 'cancel' && e !== 'close') ElMessage.error(e.response?.data?.detail || '清空文件审计失败') } finally { actionLoading.value = false } }
+async function reloadAfterDelete() { await load(); const lastPage = Math.max(1, Math.ceil(total.value / pageSize.value)); if (!error.value && page.value > lastPage) { page.value = lastPage; await load() } }
 function formatDate(value: string) { return new Date(value).toLocaleString('zh-CN') }
 onMounted(load)
 </script>

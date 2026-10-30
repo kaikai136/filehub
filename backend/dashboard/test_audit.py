@@ -129,3 +129,50 @@ class AuditTests(APITestCase):
         from .audit import unified_diff
         difference = unified_diff('old', 'new', '/tmp/file')
         self.assertIn('\n-old\n+new\n', difference)
+
+    def test_bulk_delete_and_clear_both_audit_types(self):
+        for model, endpoint, values in [
+            (FileAudit, 'file-audits', dict(project_name='demo', ip_address='192.0.2.1', directory='/a', relative_path='a', diff='')),
+            (OperationAudit, 'operation-audits', dict(module='test', action='test')),
+        ]:
+            first = model.objects.create(**values)
+            second = model.objects.create(**values)
+            response = self.client.post(f'/api/{endpoint}/bulk-delete/', {'ids': [first.pk, first.pk, 999999]}, format='json')
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(response.data['deleted_count'], 1)
+            self.assertTrue(model.objects.filter(pk=second.pk).exists())
+            response = self.client.post(f'/api/{endpoint}/clear/?keyword=unmatched&page=99')
+            self.assertEqual(response.data['deleted_count'], 1)
+            self.assertFalse(model.objects.exists())
+        self.assertFalse(OperationAudit.objects.exists())
+
+    def test_bulk_delete_validates_ids(self):
+        for endpoint in ['file-audits', 'operation-audits']:
+            for payload in [{}, {'ids': []}, {'ids': [1] * 101}, {'ids': [True]}, {'ids': [0]}, {'ids': [-1]}, {'ids': [1.5]}, {'ids': ['abc']}, {'ids': [2 ** 100]}]:
+                response = self.client.post(f'/api/{endpoint}/bulk-delete/', payload, format='json')
+                self.assertEqual(response.status_code, 400, payload)
+
+    def test_delete_permissions_are_independent(self):
+        user = User.objects.create_user('deleter')
+        role = Role.objects.create(name='delete files', code='delete_files', permissions=['file_audit.delete'])
+        user.roles.add(role)
+        self.client.force_authenticate(user)
+        self.assertEqual(self.client.post('/api/file-audits/clear/').status_code, 200)
+        self.assertEqual(self.client.post('/api/operation-audits/clear/').status_code, 403)
+        role.permissions = ['file_audit.view', 'operation_audit.view']
+        role.save()
+        for endpoint in ['file-audits', 'operation-audits']:
+            for action in ['clear', 'bulk-delete']:
+                self.assertEqual(self.client.post(f'/api/{endpoint}/{action}/', {'ids': [1]}, format='json').status_code, 403)
+        self.client.force_authenticate(None)
+        for endpoint in ['file-audits', 'operation-audits']:
+            self.assertIn(self.client.post(f'/api/{endpoint}/clear/').status_code, [401, 403])
+
+    def test_delete_file_audit_keeps_notification_and_remote_file(self):
+        audit = FileAudit.objects.create(project_name='demo', ip_address='192.0.2.1', directory='/a', relative_path='a', diff='')
+        notification = ConfigNotification.objects.create(file_audit=audit, event_type='updated', project_name='demo', host_name='node', ip_address='192.0.2.1')
+        response = self.client.post('/api/file-audits/bulk-delete/', {'ids': [audit.pk]}, format='json')
+        self.assertEqual(response.data['deleted_count'], 1)
+        notification.refresh_from_db()
+        self.assertIsNone(notification.file_audit_id)
+        self.assertTrue(RemoteFile.objects.filter(pk=self.remote_file.pk).exists())
