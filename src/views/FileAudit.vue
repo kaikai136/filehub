@@ -35,7 +35,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
-import { ElMessage, ElMessageBox, type ElTable } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { Refresh, Search, View } from '@element-plus/icons-vue'
 import { api } from '../api'
 import { hasPermission } from '../composables/useAuth'
@@ -44,10 +44,11 @@ import { auditQuery, parseUnifiedDiff } from '../features/audit/model'
 type Operator = { id: number | null; username: string; name: string }
 type FileAudit = { id: number; project_name: string; project_id: number | null; ip_address: string; directory: string; relative_path: string; operator: Operator; changed_at: string; diff?: string }
 type PageResult<T> = { count: number; page: number; page_size: number; results: T[] }
+type AuditTable = { getSelectionRows: () => FileAudit[]; toggleRowSelection: (row: FileAudit, selected?: boolean) => void; clearSelection: () => void }
 const records = ref<FileAudit[]>([]), total = ref(0), page = ref(1), pageSize = ref(20), loading = ref(false), error = ref('')
 const filters = reactive({ time: [] as string[], project: '', ip: '', directory: '', operator: '' })
 const selected = ref<FileAudit | null>(null), diffVisible = ref(false), detailLoading = ref(false)
-const selectedIds = ref<number[]>([]), actionLoading = ref(false), tableRef = ref<InstanceType<typeof ElTable>>()
+const selectedIds = ref<number[]>([]), actionLoading = ref(false), tableRef = ref<AuditTable>()
 const canDelete = computed(() => hasPermission('file_audit.view') && hasPermission('file_audit.delete'))
 const diffLines = computed(() => parseUnifiedDiff(selected.value?.diff || ''))
 async function load() { loading.value = true; error.value = ''; try { const { data } = await api.get<PageResult<FileAudit>>('/file-audits/', { params: auditQuery(filters, page.value, pageSize.value) }); records.value = data.results; total.value = data.count } catch (e: any) { error.value = e.response?.data?.detail || '加载文件审计失败' } finally { loading.value = false } }

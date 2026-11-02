@@ -33,7 +33,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
-import { ElMessage, ElMessageBox, type ElTable } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { Refresh, Search, View } from '@element-plus/icons-vue'
 import { api } from '../api'
 import { hasPermission } from '../composables/useAuth'
@@ -41,10 +41,11 @@ import { auditQuery } from '../features/audit/model'
 type Operator = { id: number | null; username: string; name: string }
 type OperationAudit = { id: number; occurred_at: string; operator: Operator; module: string; action: string; object: string; ip_address: string | null; detail: string }
 type PageResult<T> = { count: number; page: number; page_size: number; results: T[] }
+type AuditTable = { getSelectionRows: () => OperationAudit[]; toggleRowSelection: (row: OperationAudit, selected?: boolean) => void; clearSelection: () => void }
 const records = ref<OperationAudit[]>([]), total = ref(0), page = ref(1), pageSize = ref(20), loading = ref(false), error = ref('')
 const filters = reactive({ time: [] as string[], operator: '', module: '', action: '', ip: '' })
 const selected = ref<OperationAudit | null>(null), detailVisible = ref(false)
-const selectedIds = ref<number[]>([]), actionLoading = ref(false), tableRef = ref<InstanceType<typeof ElTable>>()
+const selectedIds = ref<number[]>([]), actionLoading = ref(false), tableRef = ref<AuditTable>()
 const canDelete = computed(() => hasPermission('operation_audit.view') && hasPermission('operation_audit.delete'))
 async function load() { loading.value = true; error.value = ''; try { const { data } = await api.get<PageResult<OperationAudit>>('/operation-audits/', { params: auditQuery(filters, page.value, pageSize.value) }); records.value = data.results; total.value = data.count } catch (e: any) { error.value = e.response?.data?.detail || '加载操作审计失败' } finally { loading.value = false } }
 function search() { page.value = 1; void load() }
